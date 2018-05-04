@@ -9,7 +9,7 @@ DATADIR = '/mnt/c/Users/zhang/Documents/bash_home/Daniel_Tuning/data'
 M = 100
 gamma = 0.1
 rounds = 20
-num_weaklearners = 1
+num_weaklearners = 20
 
 def run(rows, train_N, model):
 	rows = utils.shuffle(rows, seed = random.randint(1, 2000000))
@@ -35,26 +35,32 @@ def run(rows, train_N, model):
 	return float(cnt)/len(test_rows)
 
 '''
-one weak learner, banditboost accuracy on balance-scale doubled: 62%
-20 weak learners, banditboost accuracy on balance-scale doubled: 69%
+one weak learner, banditboost accuracy on balance-scale doubled: 63%
+20 weak learners, banditboost accuracy on balance-scale doubled: 71%
+20 weak learners, banditboost accuracy on balance-scale doubled: 71%
 
-one weak learner, banditboost accuracy on car.data doubled: 61%
-20 weak learners, banditboost accuracy on car.data doubled: 69%%
+one weak learner, banditboost accuracy on car.data: 61%
+20 weak learners, banditboost accuracy on car.data: 70%
+1 weak learners, ADAbanditboost accuracy on car.data: 65%
+20 weak learners, ADAbanditboost accuracy on car.data: 66%
+'''
+
+'''
+on car, adabanditboost can boost using multiplier=3 (75->81)%
+on car, banditboost can boost using multiplier=3 (70->75)%
+on balance-scale, banditboost can boost using multiplier=6 (66->80)
+on balance-scale, adabanditboost can boost using multiplier=6 (75->76)
 '''
 if __name__ == '__main__':
-	dataset = 'car.data.csv'
-	double = False
+	dataset = 'balance-scale.csv'
+	multiplier = 6
 
 	filename = os.path.join(DATADIR, dataset)
 	class_index = 0
 	training_ratio = 0.8
-	N = utils.get_num_instances(filename)
-	if double:
-		N *= 2
+	N = utils.get_num_instances(filename) * multiplier
 	train_N = int(N*training_ratio)
-	rows = utils.get_rows(filename)
-	if double:
-		rows += rows
+	rows = utils.get_rows(filename) * multiplier
 
 	print 'running model ...'
 
@@ -62,8 +68,8 @@ if __name__ == '__main__':
 	counter = 0
 	try:
 		for r in range(rounds):
-			print 'starting round:', r
-			model = AdaBanditBoost(loss='zero_one', gamma=gamma)
+			print 'starting round:', r+1
+			model = AdaBanditBoost(loss='logistic', gamma=gamma)
 			model.M = M
 			model.initialize_dataset(filename, class_index, N)
 			model.gen_weaklearners(num_weaklearners,

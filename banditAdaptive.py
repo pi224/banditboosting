@@ -20,7 +20,7 @@ class AdaBanditBoost:
 	def __init__(self, loss='logistic', gamma=0.1, rho=.05):
 		'''
 		The kwarg loss can take values of 'logistic', 'zero_one', or 'exp'. 
-		'zero_one' option corresponds to OnlineMBBM. 
+		'zero_one' option corresponds to OnlineMBBM.
 
 		The value gamma becomes meaningful only when the loss is 'zero_one'. 
 		'''
@@ -97,10 +97,10 @@ class AdaBanditBoost:
 		k = len(b)
 		r = 0
 		correct_cost = 0
-		if not self.exploring:
-			correct_cost = 1 - 1/(1-self.rho)
-		else:
-			correct_cost = 1 - (k-1)/self.rho
+		# if not self.exploring:
+		# 	correct_cost = 1 - 1/(1-self.rho)
+		# else:
+		# 	correct_cost = 1 - (k-1)/self.rho
 
 		cnt = 0
 		for _ in xrange(self.M):
@@ -215,12 +215,11 @@ class AdaBanditBoost:
 		new_s.sort()
 		new_s[0] = s[r]
 
-		# key = (n, tuple(new_s), self.exploring)
-		# if key not in self.potentials:
-		# 	value = self.mc_potential(n, self.biased_uniform, new_s)
-		# 	self.potentials[key] = value
-		# return self.potentials[key]
-		return self.mc_potential(n, self.biased_uniform, new_s)
+		key = (n, tuple(new_s), self.exploring)
+		if key not in self.potentials:
+			value = self.mc_potential(n, self.biased_uniform, new_s)
+			self.potentials[key] = value
+		return self.potentials[key]
 
 	def compute_cost(self, s, i):
 		''' Compute cost matrix
@@ -244,11 +243,11 @@ class AdaBanditBoost:
 			return ret
 		else:
 			ret = np.zeros((k, k))
-			for r in xrange(k):
-				for l in xrange(k):
-					e = np.zeros(k)
-					e[l] = 1
-					ret[r, l] = self.get_potential(r, self.num_wls-i-1, s+e)
+			# for r in xrange(k):
+			# 	for l in xrange(k):
+			# 		e = np.zeros(k)
+			# 		e[l] = 1
+			# 		ret[r, l] = self.get_potential(r, self.num_wls-i-1, s+e)
 			return ret
 
 	def get_grad(self, s, i, alpha):
@@ -282,7 +281,7 @@ class AdaBanditBoost:
 			return ret
 		else:
 			# Can never reach this case
-			return    
+			return
 
 	def get_lr(self, i):
 		''' Get learning rate
@@ -313,6 +312,10 @@ class AdaBanditBoost:
 			return 1
 		else:
 			grad = self.get_grad(s, i, alpha)
+			if not self.exploring:
+				grad /= (1-self.rho)
+			else:
+				grad *= (self.num_classes-1)/self.rho
 			lr = self.get_lr(i)
 			return max(-2, min(2, alpha - lr*grad))
 
@@ -366,6 +369,12 @@ class AdaBanditBoost:
 				return 5
 			const = self.weight_consts[i]
 			ret = -const * self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
+
+			if not self.exploring:
+				ret /= 1-self.rho
+			else:
+				ret *= (self.num_classes-1)/self.rho
+
 		elif self.loss == 'exp':
 			ret = -self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
 			N = np.exp(0.2*np.sqrt(i))
@@ -382,24 +391,24 @@ class AdaBanditBoost:
 			r = self.Y_index
 			n = self.num_wls-i-1
 			s = np.zeros(k)
-			# print self.expert_votes_mat
 			if i != 0:
 				s = self.expert_votes_mat[i-1]
-			Lhat = np.ones(k)
-			unbiased_estimator = np.zeros(k)
-			if not self.exploring:
-				unbiased_estimator[r] = 1/(1-self.rho)
-			else:
-				unbiased_estimator[r] = (k-1)/self.rho
-			Lhat -= unbiased_estimator
 
 			cost_vector = np.zeros(k)
 			for l in range(k):
 				e = np.zeros(k)
 				e[l] = 1
-				cost_vector[l] = self.get_potential(r, n, s+e)
+				pot_value = self.get_potential(r, n, s+e)
+				if not self.exploring:
+					cost_vector[l] = pot_value/(1-self.rho)
+				else:
+					cost_vector[l] = pot_value*(k-1)/self.rho
 
 			ret = sum(cost_vector) - k*cost_vector[r]
+
+			# this heuristic leads to slight improvement
+			const = self.weight_consts[i]
+			ret = 0.1 * const * ret / (self.num_classes-1)
 
 			if i == 0:
 				self.sum += ret
@@ -433,14 +442,14 @@ class AdaBanditBoost:
 		
 		for i in xrange(self.num_wls):
 			# Calculate the new cost matrix
-			# cost_mat = self.compute_cost(expert_votes, i)
+			cost_mat = self.compute_cost(expert_votes, i)
 
-			# if self.loss == 'zero_one':
-			# 	for r in xrange(self.num_classes):
-			# 		self.cost_mat_diag[i,r] = \
-			# 			np.sum(cost_mat[r]) - self.num_classes*cost_mat[r, r]
-			# else:
-			# 	self.cost_mat_diag[i,:] = np.diag(cost_mat)
+			if self.loss != 'zero_one':
+				# for r in xrange(self.num_classes):
+				# 	self.cost_mat_diag[i,r] = \
+				# 		np.sum(cost_mat[r]) - self.num_classes*cost_mat[r, r]
+				self.cost_mat_diag[i,:] = np.diag(cost_mat)
+				
 			
 			# Get our new week learner prediction and our new expert prediction
 
@@ -515,7 +524,9 @@ class AdaBanditBoost:
 		self.correct = False
 		if self.Ytilde != self.Y:
 			self.count += 1
+			# nothing more to do here
 			return
+
 
 		full_inst = self.make_full_instance(self.X, self.Y)
 		self.Y_index = int(self.find_Y_index(Y))
@@ -537,8 +548,14 @@ class AdaBanditBoost:
 			self.wl_weights[i] = \
 								self.update_alpha(expert_votes, i, alpha)
 			expert_votes[int(self.wl_preds[i])] += alpha
+
 			if self.expert_preds[i] != self.Y_index:
-				self.expert_weights[i] *= np.exp(-self.exp_step_size)
+				expert_loss = 1
+				if not self.exploring:
+					expert_loss /= 1-self.rho
+				else:
+					expert_loss *= (self.num_classes-1)/self.rho
+				self.expert_weights[i] *= np.exp(-self.exp_step_size*expert_loss)
 
 		self.expert_weights = self.expert_weights/sum(self.expert_weights)
 
