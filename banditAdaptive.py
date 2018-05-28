@@ -537,7 +537,7 @@ class AdaBanditBoost:
 		for i in xrange(self.num_wls):
 			alpha = self.wl_weights[i]
 
-			w = self.get_weight(i) 
+			w = self.get_weight(i)
 			full_inst.set_weight(w)
 			self.weaklearners[i].update_classifier(full_inst)
 

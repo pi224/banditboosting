@@ -17,7 +17,7 @@ class AdaBoostOLM:
 
 	'''
 
-	def __init__(self, loss='logistic', gamma=0.1, bandit=False):
+	def __init__(self, loss='logistic', gamma=0.1, bandit=False, rho=0):
 		'''
 		The kwarg loss can take values of 'logistic', 'zero_one', or 'exp'. 
 		'zero_one' option corresponds to OnlineMBBM. 
