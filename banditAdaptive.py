@@ -17,7 +17,7 @@ class AdaBanditBoost:
 
 	'''
 
-	def __init__(self, loss='logistic', gamma=0.1, rho=.05):
+	def __init__(self, loss='logistic', gamma=0.1, rho=.1):
 		'''
 		The kwarg loss can take values of 'logistic', 'zero_one', or 'exp'. 
 		'zero_one' option corresponds to OnlineMBBM.
@@ -85,7 +85,7 @@ class AdaBanditBoost:
 		value = np.exp(y - x)
 		return value
 
-	def mc_potential(self, t, b, s):
+	def mc_potential_OLD(self, t, b, s):
 		'''Approximate potential via Monte Carlo simulation
 		Arbs:
 			t (int)     : number of weak learners until final decision
@@ -114,6 +114,33 @@ class AdaBanditBoost:
 			else:
 				cnt += correct_cost
 		return float(cnt) / self.M
+
+	def mc_potential(self, t, b, s, L):
+		'''Approximate potential via Monte Carlo simulation
+		Arbs:
+			t (int)     : number of weak learners until final decision
+			b (list)    : baseline distribution
+			s (list)    : current state
+			L (list)	: loss function
+		Returns:
+			potential value (float)
+		'''
+		k = len(b)
+		r = 0
+		# if not self.exploring:
+		# 	correct_cost = 1 - 1/(1-self.rho)
+		# else:
+		# 	correct_cost = 1 - (k-1)/self.rho
+
+		loss = 0.0
+		for _ in xrange(self.M):
+			x = np.random.multinomial(t, b)
+			x = x + s
+			tmp = [z for z in range(k)
+				if x[z] == max(x)]
+			i = np.random.choice(tmp)
+			loss += L[i]
+		return loss / self.M
 
 	def make_cov_instance(self, X):
 		'''Turns a list of covariates into an Instance set to self.datset 
@@ -201,7 +228,7 @@ class AdaBanditBoost:
 
 	########################################################################
 
-	def get_potential(self, r, n, s):
+	def get_potential_OLD(self, r, n, s):
 		'''Compute potential
 		Args:
 			r (int): True label index
@@ -217,7 +244,22 @@ class AdaBanditBoost:
 
 		key = (n, tuple(new_s), self.exploring)
 		if key not in self.potentials:
-			value = self.mc_potential(n, self.biased_uniform, new_s)
+			value = self.mc_potential_OLD(n, self.biased_uniform, new_s)
+			self.potentials[key] = value
+		return self.potentials[key]
+
+	def get_potential(self, r, n, s, Lhat):
+		new_s = np.asarray(list(s))
+		new_s[r] = -np.inf
+		ordering = new_s.argsort()
+		Lhat_sorted = Lhat[ordering]
+		new_s = new_s[ordering]
+		new_s[0] = s[r]
+
+		# storing values in hash table
+		key = (n, tuple(new_s), tuple(Lhat_sorted))
+		if key not in self.potentials:
+			value = self.mc_potential(n, self.biased_uniform, new_s, Lhat_sorted)
 			self.potentials[key] = value
 		return self.potentials[key]
 
@@ -319,45 +361,7 @@ class AdaBanditBoost:
 			lr = self.get_lr(i)
 			return max(-2, min(2, alpha - lr*grad))
 
-	def arbitrary_mc_potential(self, t, b, s, L):
-		'''Approximate potential via Monte Carlo simulation
-		Arbs:
-			t (int)     : number of weak learners until final decision
-			b (list)    : baseline distribution
-			s (list)    : current state
-			L (array)	: loss function
-		Returns:
-			potential value (float)
-		'''
-		k = len(b)
-		cnt = 0
-		for _ in xrange(self.M):
-			x = np.random.multinomial(t, b)
-			x = x + s
-
-			tmp = [z for z in range(k)
-						if x[z] == max(x)]
-			i = np.random.choice(tmp)
-			cnt += L[i]
-		return float(cnt) / self.M
-
-	def get_arbitrary_potential(self, r, n, s, L):
-		'''Compute potential
-		Args:
-			r (int): True label index
-			n (int): Number of weak learners until final decision
-			s (list): Current state
-			L (array): the loss at each index
-		Returns:
-			(float) potential function
-		'''
-		# TODO: make this faster?
-		k = self.num_classes
-		distribution = np.ones(self.num_classes) * (1-self.gamma)/float(k)
-		distribution[r] += self.gamma
-		return self.arbitrary_mc_potential(n, distribution, s, L)
-
-	def get_weight(self, i):
+	def get_weight(self, i, Lhat):
 		''' Compute sample weight
 		Args:
 			i (int): Weak learner index
@@ -398,11 +402,9 @@ class AdaBanditBoost:
 			for l in range(k):
 				e = np.zeros(k)
 				e[l] = 1
-				pot_value = self.get_potential(r, n, s+e)
-				if not self.exploring:
-					cost_vector[l] = pot_value/(1-self.rho)
-				else:
-					cost_vector[l] = pot_value*(k-1)/self.rho
+				pot_value = self.get_potential(r, n, s+e, Lhat)
+				cost_vector[l] = pot_value
+			# print cost_vector
 
 			ret = sum(cost_vector) - k*cost_vector[r]
 
@@ -504,7 +506,7 @@ class AdaBanditBoost:
 		return self.Ytilde
 
 	def update(self, Y, X=None, verbose=False):
-		'''Runs the entire updating procedure, updating interal 
+		'''Runs the entire updating procedure, updating internal 
 		tracking of wl_weights and expert_weights
 		Args:
 			X (list): A list of the covariates of the current data point. 
@@ -520,24 +522,43 @@ class AdaBanditBoost:
 
 		self.X = X
 		self.Y = Y
+		self.Y_index = int(self.find_Y_index(Y))
 
-		self.correct = False
-		if self.Ytilde != self.Y:
-			self.count += 1
-			# nothing more to do here
+		# compute cost function
+		# lowercase definitions are indices starting from 0
+		ytilde = self.Ytilde_index
+		y = self.Y_index
+		yhat = self.Yhat_index
+		k = float(self.num_classes)
+		rho = self.rho
+		P = np.asarray([rho/(k-1) if r != yhat else 1-rho
+					for r in range(int(k))])
+		Lhat = np.asarray([(ytilde==y)/P[y]*(y!=r)*(yhat!=r) +
+							(ytilde==yhat)/P[yhat]*(yhat!=y)*(yhat==r)
+							for r in range(int(k))])
+		# only case where we do nothing is when Lhat is still zero
+		if np.sum(Lhat) == 0.0:
 			return
+		assert(np.min(Lhat) == Lhat[y])
 
-
+		'''
+		set label for bandit info - if we were wrong, set y randomly
+		and change self.Y
+		'''
+		if ytilde != y:
+			not_yhats = range(int(k))
+			not_yhats.remove(yhat)
+			y = np.random.choice(not_yhats)
+			self.Y = self.find_Y(y)
 		full_inst = self.make_full_instance(self.X, self.Y)
 		self.Y_index = int(self.find_Y_index(Y))
-		self.num_data +=1
-		self.num_errors = self.num_errors + (self.Y_index != self.Yhat_index)
+		assert(np.min(Lhat) == Lhat[y])
 
 		expert_votes = np.zeros(self.num_classes)
 		for i in xrange(self.num_wls):
 			alpha = self.wl_weights[i]
 
-			w = self.get_weight(i)
+			w = self.get_weight(i, Lhat)
 			full_inst.set_weight(w)
 			self.weaklearners[i].update_classifier(full_inst)
 

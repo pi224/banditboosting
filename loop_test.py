@@ -68,11 +68,11 @@ def plotRun(BISnum_examples, BISaccuracies, FISnum_examples, FISaccuracies):
 OUTFILENAMEBASE = 'loop_test_out'
 OUTFILETYPE = 'FULL.png'
 DATADIR = '/mnt/c/Users/zhang/Documents/bash_home/Daniel_Tuning/data'
-RESULTSDIR = '/mnt/c/Users/zhang/Documents/bash_home/BanditSLC/results2/'
+RESULTSDIR = '/mnt/c/Users/zhang/Documents/bash_home/BanditSLC/resultsMK2/'
 
 # IMPORTANT HYPERPARAMETERS, SET THEM HERE
 
-LOSS = 'logistic'
+LOSS = 'zero_one'
 NUM_WLS = 20
 RHO = .05
 GAMMA = .1
@@ -81,7 +81,7 @@ dataset = 'mice_protein.csv'
 # ------------------------------------------
 
 if __name__ == '__main__':
-	multiplier = 6
+	multiplier = 8
 
 	filename = os.path.join(DATADIR, dataset)
 	class_index = 0
@@ -114,10 +114,10 @@ if __name__ == '__main__':
 						   min_weight=5, max_weight=200,
 						   seed=random.randint(1, 2000000000))
 
-	print 'running FIS model ...'
-	FISnum_examples, FISaccuracies = run(rows, FISmodel, test_N)
 	print 'running BIS model ...'
 	BISnum_examples, BISaccuracies = run(rows, BISmodel, test_N)
+	print 'running FIS model ...'
+	FISnum_examples, FISaccuracies = run(rows, FISmodel, test_N)
 
 	plotRun(BISnum_examples, BISaccuracies,
 				FISnum_examples, FISaccuracies)
