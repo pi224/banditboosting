@@ -60,7 +60,7 @@ def run(rows, model, metric_window):
 
 def plotRun(BISnum_examples, BISaccuracies, FISnum_examples, FISaccuracies):
 	specs = '_loss='+str(LOSS)+'_num_wls='+str(NUM_WLS)+\
-				'_rho='+str(RHO)+'_gamma='+str(GAMMA)+'_DATAFILE='+DATAFILE+\
+				'_rho='+str(RHO)+'_gamma='+str(GAMMA)+'\n_DATAFILE='+DATAFILE+\
 				'_DATAMULTIPLIER='+str(MULTIPLIER)
 	
 	plt.plot(BISnum_examples, BISaccuracies, color='red')
@@ -68,10 +68,15 @@ def plotRun(BISnum_examples, BISaccuracies, FISnum_examples, FISaccuracies):
 	plt.title('Number of examples vs performance\n'+specs)
 	plt.xlabel('Instances count')
 	plt.ylabel('Window accuracy')
+	plt.tight_layout()
+	plt.subplots_adjust(top=0.85)
 	BISpatch = mpatches.Patch(color='red', label='BIS')
 	FISpatch = mpatches.Patch(color='blue', label='FIS')
 
-	savefile = os.path.join(RESULTSDIR, OUTFILENAMEBASE+specs+OUTFILETYPE)
+	filename_identifier = specs.replace('\n', '')
+	print filename_identifier
+	savefile = os.path.join(RESULTSDIR, OUTFILENAMEBASE+\
+				filename_identifier+OUTFILETYPE)
 	print 'saving graph to', savefile
 	if os.path.exists(savefile):
 		print 'error:', savefile, 'already exists'
