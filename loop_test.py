@@ -4,10 +4,22 @@ import utils
 import os
 import random
 from tqdm import tqdm
+import matplotlib
+matplotlib.use('agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 sns.set_style('darkgrid')
+import argparse
+import config
+
+# variables defined in running the script
+LOSS = ''
+NUM_WLS = 1
+RHO = 0.0
+GAMMA = 0.0
+DATAFILE = ''
+MULTIPLIER = 0
 
 # this no longer shuffles the data
 def run(rows, model, metric_window):
@@ -48,7 +60,7 @@ def run(rows, model, metric_window):
 
 def plotRun(BISnum_examples, BISaccuracies, FISnum_examples, FISaccuracies):
 	specs = '_loss='+str(LOSS)+'_num_wls='+str(NUM_WLS)+\
-				'_rho='+str(RHO)+'_gamma='+str(GAMMA)+'_dataset='+dataset
+				'_rho='+str(RHO)+'_gamma='+str(GAMMA)+'_DATAFILE='+DATAFILE
 	
 	plt.plot(BISnum_examples, BISaccuracies, color='red')
 	plt.plot(FISnum_examples, FISaccuracies, color='blue')
@@ -65,37 +77,43 @@ def plotRun(BISnum_examples, BISaccuracies, FISnum_examples, FISaccuracies):
 		exit(1)
 	plt.savefig(savefile)
 
-OUTFILENAMEBASE = 'loop_test_out'
-OUTFILETYPE = 'FULL.png'
-DATADIR = '/mnt/c/Users/zhang/Documents/bash_home/Daniel_Tuning/data'
-RESULTSDIR = '/mnt/c/Users/zhang/Documents/bash_home/BanditSLC/resultsMK2/'
-
-# IMPORTANT HYPERPARAMETERS, SET THEM HERE
-
-LOSS = 'zero_one'
-NUM_WLS = 20
-RHO = .05
-GAMMA = .1
-dataset = 'mice_protein.csv'
-
-# ------------------------------------------
-
+OUTFILENAMEBASE = config.OUTFILENAMEBASE
+OUTFILETYPE = config.OUTFILETYPE
+DATADIR = config.DATADIR
+RESULTSDIR = config.RESULTSDIR
+'''
+to run, call:
+python2 loop_test.py --loss=zero_one --num_wls=20 --rho=0.1 --gamma=0.1 --datafile=balance-scale.csv --multiplier=1
+'''
 if __name__ == '__main__':
-	multiplier = 8
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--loss', type=str, required=True)
+	parser.add_argument('--num_wls', type=int, required=True)
+	parser.add_argument('--rho', type=float, required=True)
+	parser.add_argument('--gamma', type=float, required=True)
+	parser.add_argument('--datafile', type=str, required=True)
+	parser.add_argument('--multiplier', type=int, required=True)
+	args = parser.parse_args()
+	LOSS = args.loss
+	NUM_WLS = args.num_wls
+	RHO = args.rho
+	GAMMA = args.gamma
+	DATAFILE = args.datafile
+	MULTIPLIER = args.multiplier
 
-	filename = os.path.join(DATADIR, dataset)
+	filename = os.path.join(DATADIR, DATAFILE)
 	class_index = 0
 	training_ratio = 0.8
 	N = utils.get_num_instances(filename)
 	test_N = int(N - N*training_ratio)
 	assert(test_N > 0)
-	rows = utils.get_rows(filename) * multiplier
+	rows = utils.get_rows(filename) * MULTIPLIER
 	rows = utils.shuffle(rows, seed = random.randint(1, 2000000))
 
 	FISmodel = AdaBoostOLM(loss=LOSS, gamma=GAMMA, rho=RHO)
 	FISmodel.M = 100
 	FISmodel.initialize_dataset(filename, class_index,
-								probe_instances=N*multiplier)
+								probe_instances=N*MULTIPLIER)
 	FISmodel.gen_weaklearners(num_wls=NUM_WLS,
 						   min_grace=5, max_grace=20,
 						   min_tie=0.01, max_tie=0.9,
@@ -106,7 +124,7 @@ if __name__ == '__main__':
 	BISmodel = AdaBanditBoost(loss=LOSS, gamma=GAMMA, rho=RHO)
 	BISmodel.M = 100
 	BISmodel.initialize_dataset(filename, class_index,
-								probe_instances=N*multiplier)
+								probe_instances=N*MULTIPLIER)
 	BISmodel.gen_weaklearners(num_wls=NUM_WLS,
 						   min_grace=5, max_grace=20,
 						   min_tie=0.01, max_tie=0.9,
