@@ -60,7 +60,8 @@ def run(rows, model, metric_window):
 
 def plotRun(BISnum_examples, BISaccuracies, FISnum_examples, FISaccuracies):
 	specs = '_loss='+str(LOSS)+'_num_wls='+str(NUM_WLS)+\
-				'_rho='+str(RHO)+'_gamma='+str(GAMMA)+'_DATAFILE='+DATAFILE
+				'_rho='+str(RHO)+'_gamma='+str(GAMMA)+'_DATAFILE='+DATAFILE+\
+				'_DATAMULTIPLIER='+str(MULTIPLIER)
 	
 	plt.plot(BISnum_examples, BISaccuracies, color='red')
 	plt.plot(FISnum_examples, FISaccuracies, color='blue')
