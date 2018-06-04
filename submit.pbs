@@ -26,4 +26,4 @@ if [ -d "$PBS_O_WORKDIR" ] ; then
 fi
 
 #  Put your job commands after this line
-echo "Hello, world."
+python2 loop_test.py --loss=zero_one --num_wls=20 --rho=0.09999 --gamma=0.1 --datafile=balance-scale.csv --multiplier=1
