@@ -6,9 +6,9 @@ import random
 from tqdm import tqdm
 import matplotlib
 matplotlib.use('agg')
-import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import seaborn as sns
 sns.set_style('darkgrid')
 import argparse
 import config
@@ -74,7 +74,6 @@ def plotRun(BISnum_examples, BISaccuracies, FISnum_examples, FISaccuracies):
 	FISpatch = mpatches.Patch(color='blue', label='FIS')
 
 	filename_identifier = specs.replace('\n', '')
-	print filename_identifier
 	savefile = os.path.join(RESULTSDIR, OUTFILENAMEBASE+\
 				filename_identifier+OUTFILETYPE)
 	print 'saving graph to', savefile
@@ -83,7 +82,7 @@ def plotRun(BISnum_examples, BISaccuracies, FISnum_examples, FISaccuracies):
 		exit(1)
 	plt.savefig(savefile)
 
-OUTFILENAMEBASE = config.OUTFILENAMEBASE
+OUTFILENAMEBASE = 'loop_test_out'
 OUTFILETYPE = config.OUTFILETYPE
 DATADIR = config.DATADIR
 RESULTSDIR = config.RESULTSDIR
