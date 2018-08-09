@@ -20,6 +20,7 @@ NUM_WLS = 1
 GAMMA = 0.0
 DATAFILE = ''
 MULTIPLIER = 0
+RHORANGESPEC = ''
 # default rho range
 RHORANGE = np.arange(0.01, .21, .02)
 
@@ -47,7 +48,7 @@ def run(rows, metric_window):
 def plotRun(rhos, accuracies):
 	specs = '_loss='+str(LOSS)+'_num_wls='+str(NUM_WLS)+\
 				'_gamma='+str(GAMMA)+'\n_DATAFILE='+DATAFILE+\
-				'_DATAMULTIPLIER='+str(MULTIPLIER)
+				'_DATAMULTIPLIER='+str(MULTIPLIER)+'_arrayspec='+RHORANGESPEC
 	sns.tsplot(accuracies, time=rhos)
 	plt.xlabel('rho')
 	plt.ylabel('accuracy')
@@ -93,10 +94,10 @@ if __name__ == '__main__':
 	DATAFILE = args.datafile
 	MULTIPLIER = args.multiplier
 	if '_' in args.array_spec:
-		arange_args = [float(arg) for arg in args.array_spec.split('_')]
+		RHORANGESPEC = [float(arg) for arg in args.array_spec.split('_')]
 		RHORANGE = np.arange(*arange_args)
 	else:
-		arange_args = [float(arg) for arg in args.array_spec.split(',')]
+		RHORANGESPEC = [float(arg) for arg in args.array_spec.split(',')]
 		RHORANGE = np.asarray(arange_args)
 
 	filename = os.path.join(DATADIR, DATAFILE)
