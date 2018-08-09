@@ -20,8 +20,8 @@ NUM_WLS = 1
 GAMMA = 0.0
 DATAFILE = ''
 MULTIPLIER = 0
+# default rho range
 RHORANGE = np.arange(0.01, .21, .02)
-# we fix the rho range because it really should be the for all experiments
 
 # returns the last accuracy from loop_run
 def run(rows, metric_window):
@@ -70,7 +70,7 @@ DATADIR = config.DATADIR
 RESULTSDIR = config.RESULTSDIR
 '''
 to run, call:
-python2 rho_test.py --loss=zero_one --num_wls=20 --gamma=0.1 --datafile=balance-scale.csv --multiplier=1
+python2 rho_test.py --loss=zero_one --num_wls=20 --gamma=0.1 --datafile=balance-scale.csv --multiplier=1 --array_spec=0.1_1_.001
 '''
 
 if __name__ == '__main__':
@@ -80,12 +80,24 @@ if __name__ == '__main__':
 	parser.add_argument('--gamma', type=float, required=True)
 	parser.add_argument('--datafile', type=str, required=True)
 	parser.add_argument('--multiplier', type=int, required=True)
-	args = parser.parse_args()
+	'''
+	the way to use this argument is like 0.1,0.2,0.3 (list of values)
+	or 0.1_0.2_20 (use numpy.arange)
+	the presence of an underscore signals the second interpretation
+	'''
+	parser.add_argument('--array_spec', type=str, required=True)
+	args, unknown = parser.parse_known_args()
 	LOSS = args.loss
 	NUM_WLS = args.num_wls
 	GAMMA = args.gamma
 	DATAFILE = args.datafile
 	MULTIPLIER = args.multiplier
+	if '_' in args.array_spec:
+		arange_args = [float(arg) for arg in args.array_spec.split('_')]
+		RHORANGE = np.arange(*arange_args)
+	else:
+		arange_args = [float(arg) for arg in args.array_spec.split(',')]
+		RHORANGE = np.asarray(arange_args)
 
 	filename = os.path.join(DATADIR, DATAFILE)
 	class_index = 0

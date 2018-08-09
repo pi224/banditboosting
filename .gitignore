@@ -1,5 +1,5 @@
 config.py
-submit.pbs
+submit.py
 bandit_boosting*
 
 # Byte-compiled / optimized / DLL files
