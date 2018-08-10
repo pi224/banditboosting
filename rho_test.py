@@ -3,6 +3,7 @@ from banditAdaptive import AdaBanditBoost
 from loop_test import run as loop_run
 import utils
 import os
+import math
 import random
 import numpy as np
 from tqdm import tqdm
@@ -23,6 +24,8 @@ MULTIPLIER = 0
 RHORANGESTRING = ''
 # default rho range
 RHORANGE = np.arange(0.01, .21, .02)
+# use linear or exponential plotting
+LIN_OR_EXP = 'lin'
 
 # returns the last accuracy from loop_run
 def run(rows, metric_window):
@@ -49,8 +52,16 @@ def plotRun(rhos, accuracies):
 	specs = '_loss='+str(LOSS)+'_num_wls='+str(NUM_WLS)+\
 				'_gamma='+str(GAMMA)+'\n_DATAFILE='+DATAFILE+\
 				'_DATAMULTIPLIER='+str(MULTIPLIER)+'_arrayspec='+RHORANGESTRING
+	if LIN_OR_EXP is 'exp':
+		# exponential plotting
+		rhos = [math.log10(r) for r in rhos]
+	print('rhos:', rhos)
+
 	sns.tsplot(accuracies, time=rhos)
-	plt.xlabel('rho')
+	if LIN_OR_EXP is 'exp':
+		plt.xlabel('log_10(rhos)')
+	else:
+		plt.xlabel('rhos')
 	plt.ylabel('accuracy')
 	plt.title('rho vs performance\n'+specs)
 	plt.tight_layout()
@@ -71,7 +82,7 @@ DATADIR = config.DATADIR
 RESULTSDIR = config.RESULTSDIR
 '''
 to run, call:
-python2 rho_test.py --loss=zero_one --num_wls=20 --gamma=0.1 --datafile=balance-scale.csv --multiplier=1 --array_spec=0.1_1_.001
+python2 rho_test.py --loss=zero_one --num_wls=20 --gamma=0.1 --datafile=balance-scale.csv --multiplier=1 --array_spec=0.1_1_.4
 '''
 
 if __name__ == '__main__':
@@ -95,9 +106,11 @@ if __name__ == '__main__':
 	MULTIPLIER = args.multiplier
 	RHORANGESTRING = args.array_spec
 	if '_' in args.array_spec:
+		LIN_OR_EXP = 'lin'
 		arange_args = [float(arg) for arg in args.array_spec.split('_')]
 		RHORANGE = np.arange(*arange_args)
 	else:
+		LIN_OR_EXP = 'exp'
 		arange_args = [float(arg) for arg in args.array_spec.split(',')]
 		RHORANGE = np.asarray(arange_args)
 

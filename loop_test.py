@@ -98,7 +98,7 @@ if __name__ == '__main__':
 	parser.add_argument('--gamma', type=float, required=True)
 	parser.add_argument('--datafile', type=str, required=True)
 	parser.add_argument('--multiplier', type=int, required=True)
-	args = parser.parse_args()
+	args, unknown = parser.parse_known_args()
 	LOSS = args.loss
 	NUM_WLS = args.num_wls
 	RHO = args.rho
