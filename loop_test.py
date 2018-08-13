@@ -20,6 +20,7 @@ RHO = 0.0
 GAMMA = 0.0
 DATAFILE = ''
 MULTIPLIER = 0
+TITLE = ''
 
 # this no longer shuffles the data
 def run(rows, model, metric_window):
@@ -65,13 +66,17 @@ def plotRun(BISnum_examples, BISaccuracies, FISnum_examples, FISaccuracies):
 	
 	plt.plot(BISnum_examples, BISaccuracies, color='red')
 	plt.plot(FISnum_examples, FISaccuracies, color='blue')
-	plt.title('Number of examples vs performance\n'+specs)
+	if TITLE is '':
+		plt.title('Number of examples vs performance\n'+specs)
+	else:
+		plt.title(TITLE)
 	plt.xlabel('Instances count')
 	plt.ylabel('Window accuracy')
 	plt.tight_layout()
 	plt.subplots_adjust(top=0.85)
-	BISpatch = mpatches.Patch(color='red', label='BIS')
-	FISpatch = mpatches.Patch(color='blue', label='FIS')
+	BISpatch = mpatches.Patch(color='red', label='Bandit')
+	FISpatch = mpatches.Patch(color='blue', label='FullInfo')
+	plt.legend(handles=[BISpatch, FISpatch])
 
 	filename_identifier = specs.replace('\n', '')
 	savefile = os.path.join(RESULTSDIR, OUTFILENAMEBASE+\
@@ -98,6 +103,7 @@ if __name__ == '__main__':
 	parser.add_argument('--gamma', type=float, required=True)
 	parser.add_argument('--datafile', type=str, required=True)
 	parser.add_argument('--multiplier', type=int, required=True)
+	parser.add_argument('--title', type=str, required=False, default='')
 	args, unknown = parser.parse_known_args()
 	LOSS = args.loss
 	NUM_WLS = args.num_wls
@@ -105,6 +111,7 @@ if __name__ == '__main__':
 	GAMMA = args.gamma
 	DATAFILE = args.datafile
 	MULTIPLIER = args.multiplier
+	TITLE = args.title
 
 	filename = os.path.join(DATADIR, DATAFILE)
 	class_index = 0
