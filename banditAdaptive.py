@@ -335,6 +335,7 @@ class AdaBanditBoost:
 		if self.loss == 'zero_one':
 			return 1
 		else:
+			# TODO: num data is 0.0 - WHAT
 			ret = 2*np.sqrt(2)/((self.num_classes-1)*np.sqrt(self.num_data))
 			if self.loss == 'logistic':
 				return ret
@@ -369,11 +370,13 @@ class AdaBanditBoost:
 			(float): Sample weight
 		'''
 		if self.loss == 'logistic':
-			if i == 0:
-				return 5
+			# if i == 0:
+			# 	# TODO: ????? what is this
+			# 	return 5
 			const = self.weight_consts[i]
 			ret = -const * self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
 
+			# TODO: this seems incorrect.
 			if not self.exploring:
 				ret /= 1-self.rho
 			else:
@@ -389,6 +392,7 @@ class AdaBanditBoost:
 			# ret = 0.1 * const * ret
 			'''
 			bandit weights below
+			this section has been debugged
 			'''
 
 			k = self.num_classes
@@ -412,9 +416,10 @@ class AdaBanditBoost:
 			const = self.weight_consts[i]
 			ret = 0.1 * const * ret / (self.num_classes-1)
 
-			if i == 0:
-				self.sum += ret
-				self.count += 1
+			# if i == 0:
+			# this appears to be debugging code
+			# 	self.sum += ret
+			# 	self.count += 1
 		return max(1e-10, ret)
 
 	def predict(self, X, verbose=False):
@@ -516,6 +521,9 @@ class AdaBanditBoost:
 			Y (string): The true class
 			verbose (bool): If true, the function prints logs. 
 		'''
+
+		# this is here so that learning rate goes down appropriately
+		self.num_data +=1
 
 		if X is None:
 			X = self.X
