@@ -228,26 +228,6 @@ class AdaBanditBoost:
 
 	########################################################################
 
-	def get_potential_OLD(self, r, n, s):
-		'''Compute potential
-		Args:
-			r (int): True label index
-			n (int): Number of weak learners until final decision
-			s (list): Current state
-		Returns:
-			(float) potential function
-		'''
-		new_s = list(s)
-		new_s[r] = -np.inf
-		new_s.sort()
-		new_s[0] = s[r]
-
-		key = (n, tuple(new_s), self.exploring)
-		if key not in self.potentials:
-			value = self.mc_potential_OLD(n, self.biased_uniform, new_s)
-			self.potentials[key] = value
-		return self.potentials[key]
-
 	def get_potential(self, r, n, s, Lhat):
 		new_s = np.asarray(list(s))
 		new_s[r] = -np.inf
@@ -292,7 +272,7 @@ class AdaBanditBoost:
 			# 		ret[r, l] = self.get_potential(r, self.num_wls-i-1, s+e)
 			return ret
 
-	def get_grad(self, s, i, alpha):
+	def get_grad(self, s, i, alpha, label_index):
 		''' Compute gradient for differnt losses
 		Args:
 			s (list): Current state
@@ -302,16 +282,18 @@ class AdaBanditBoost:
 			(float): Gradient
 		'''
 		if self.loss == 'logistic':
-			if self.wl_preds[i] == self.Y_index:
+			if self.wl_preds[i] == label_index:
 				tmp_zeroer = np.ones(self.num_classes)
-				tmp_zeroer[self.Y_index] = 0
-				tmp = -1/ (1 + np.exp(s - (alpha + s[self.Y_index])))
+				tmp_zeroer[label_index] = 0
+				tmp = -1/ (1 + np.exp(s - (alpha + s[label_index])))
 				ret = sum(tmp_zeroer * tmp)
 			else:
-				tmp = s[self.Y_index] - s[int(self.wl_preds[i])] - alpha
+				tmp = s[label_index] - s[int(self.wl_preds[i])] - alpha
 				ret = 1/(1 + np.exp(tmp))
 			return ret
 		elif self.loss == 'exp':
+			print 'we don\'t have exponential loss yet!'
+			assert False
 			if self.wl_preds[i] == self.Y_index:
 				tmp_zeroer = np.ones(self.num_classes)
 				tmp_zeroer[self.Y_index] = 0
@@ -335,14 +317,14 @@ class AdaBanditBoost:
 		if self.loss == 'zero_one':
 			return 1
 		else:
-			# TODO: num data is 0.0 - WHAT
+			# TODO: get proper learning rate for bandits
 			ret = 2*np.sqrt(2)/((self.num_classes-1)*np.sqrt(self.num_data))
 			if self.loss == 'logistic':
 				return ret
 			else:
 				return ret * np.exp(-i)
 		
-	def update_alpha(self, s, i, alpha):
+	def update_alpha(self, s, i, alpha, Ihat):
 		''' Update the weight alpha
 		Args:
 			s (list): Current state
@@ -354,11 +336,10 @@ class AdaBanditBoost:
 		if self.loss == 'zero_one':
 			return 1
 		else:
-			grad = self.get_grad(s, i, alpha)
-			if not self.exploring:
-				grad /= (1-self.rho)
-			else:
-				grad *= (self.num_classes-1)/self.rho
+			k = self.num_classes
+			grad_vector = np.asarray([self.get_grad(s, i, alpha, label_index)
+					for label_index in range(k)])
+			grad = np.dot(grad_vector, Ihat)
 			lr = self.get_lr(i)
 			return max(-2, min(2, alpha - lr*grad))
 
@@ -370,26 +351,19 @@ class AdaBanditBoost:
 			(float): Sample weight
 		'''
 		if self.loss == 'logistic':
-			# if i == 0:
-			# 	# TODO: ????? what is this
-			# 	return 5
 			const = self.weight_consts[i]
-			ret = -const * self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
-
-			# TODO: this seems incorrect.
-			if not self.exploring:
-				ret /= 1-self.rho
-			else:
-				ret *= (self.num_classes-1)/self.rho
-
+			k = self.num_classes
+			s = np.zeros(k)
+			if i != 0:
+				s = self.expert_votes_mat[i-1]
+			cm = np.asarray(self.compute_cost(s, i))
+			chat = np.matmul(cm.transpose(), 1-Lhat)
+			ret = np.sum(chat) - k*np.min(chat)
 		elif self.loss == 'exp':
 			ret = -self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
 			N = np.exp(0.2*np.sqrt(i))
 			ret = 10 * ret / N
 		else:
-			# const = self.weight_consts[i]
-			# ret = self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
-			# ret = 0.1 * const * ret
 			'''
 			bandit weights below
 			this section has been debugged
@@ -415,11 +389,6 @@ class AdaBanditBoost:
 			# this heuristic leads to slight improvement
 			const = self.weight_consts[i]
 			ret = 0.1 * const * ret / (self.num_classes-1)
-
-			# if i == 0:
-			# this appears to be debugging code
-			# 	self.sum += ret
-			# 	self.count += 1
 		return max(1e-10, ret)
 
 	def predict(self, X, verbose=False):
@@ -537,34 +506,54 @@ class AdaBanditBoost:
 		ytilde = self.Ytilde_index
 		y = self.Y_index
 		yhat = self.Yhat_index
-		k = float(self.num_classes)
+		k = self.num_classes
 		rho = self.rho
 		P = np.asarray([rho/(k-1) if r != yhat else 1-rho
-					for r in range(int(k))])
+					for r in range(k)])
 		Lhat = np.asarray([(ytilde==y)/P[y]*(y!=r)*(yhat!=r) +
 							(ytilde==yhat)/P[yhat]*(yhat!=y)*(yhat==r)
-							for r in range(int(k))])
+							for r in range(k)])
+		Ihat = np.ones(k)
 		# only case where we do nothing is when Lhat is still zero
-		if np.sum(Lhat) == 0.0:
-			return
-		assert(np.min(Lhat) == Lhat[y])
+		if self.loss == 'zero_one':
+			# zero one loss algorithm has some extra constraints
+			if np.sum(Lhat) == 0.0:
+				return
+			assert(np.min(Lhat) == Lhat[y])
+		if self.loss =='logistic':
+			# if we use logistic loss, we will use Ihat
+			Ihat -= Lhat
 
 		'''
 		set label for bandit info - if we were wrong, set y randomly
 		and change self.Y
 		'''
-		if ytilde != y:
-			not_yhats = range(int(k))
-			not_yhats.remove(yhat)
-			y = np.random.choice(not_yhats)
-			self.Y = self.find_Y(y)
+		if self.loss == 'zero_one':
+			# zero_one loss requires setting the label first
+			if ytilde != y:
+				not_yhats = range(int(k))
+				not_yhats.remove(yhat)
+				y = np.random.choice(not_yhats)
+				self.Y = self.find_Y(y)
 		full_inst = self.make_full_instance(self.X, self.Y)
 		self.Y_index = int(self.find_Y_index(Y))
 		assert(np.min(Lhat) == Lhat[y])
 
 		expert_votes = np.zeros(self.num_classes)
 		for i in xrange(self.num_wls):
+			# NOTE: be careful where you use LHat and Ihat!
 			alpha = self.wl_weights[i]
+
+			if self.loss == 'logistic':
+				# logistic loss algorithm requires us to replace full_inst
+				# label is selected randomly
+				cm = np.asarray(self.compute_cost(expert_votes, i))
+				chat = np.matmul(cm.transpose(), Ihat)
+				min_indices = np.where(chat == np.min(chat))[0]
+				# artificial label
+				aLabel_index = np.random.choice(min_indices)
+				aLabel = self.find_Y(aLabel_index)
+				full_inst = self.make_full_instance(self.X, aLabel)
 
 			w = self.get_weight(i, Lhat)
 			full_inst.set_weight(w)
@@ -575,16 +564,19 @@ class AdaBanditBoost:
 
 			# updating the quality weights and weighted vote vector
 			self.wl_weights[i] = \
-								self.update_alpha(expert_votes, i, alpha)
+								self.update_alpha(expert_votes, i, alpha, Ihat)
+			# self.wl_weights[i] = 1
 			expert_votes[int(self.wl_preds[i])] += alpha
 
-			if self.expert_preds[i] != self.Y_index:
-				expert_loss = 1
-				if not self.exploring:
-					expert_loss /= 1-self.rho
-				else:
-					expert_loss *= (self.num_classes-1)/self.rho
-				self.expert_weights[i] *= np.exp(-self.exp_step_size*expert_loss)
+			'''
+			get an unbiased estimate of expert loss by taking
+			the estimated zero-one loss from Lhat
+			'''
+			expert_vote_index = np.random.choice(np.where(
+						expert_votes == np.max(expert_votes)
+					)[0])
+			expert_loss = Lhat[expert_vote_index]
+			self.expert_weights[i] *= np.exp(-self.exp_step_size*expert_loss)
 
 		self.expert_weights = self.expert_weights/sum(self.expert_weights)
 
