@@ -117,7 +117,7 @@ if __name__ == '__main__':
 	class_index = 0
 	training_ratio = 0.8
 	N = utils.get_num_instances(filename)
-	test_N = int(N - N*training_ratio)
+	test_N = int(N - N*training_ratio) * MULTIPLIER
 	assert(test_N > 0)
 	rows = utils.get_rows(filename) * MULTIPLIER
 	rows = utils.shuffle(rows, seed = random.randint(1, 2000000))
