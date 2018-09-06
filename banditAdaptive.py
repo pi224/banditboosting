@@ -544,17 +544,6 @@ class AdaBanditBoost:
 			# NOTE: be careful where you use LHat and Ihat!
 			alpha = self.wl_weights[i]
 
-			# if self.loss == 'logistic' and ytilde != y:
-			# 	# logistic loss algorithm requires us to replace full_inst
-			# 	# label is selected randomly
-			# 	cm = np.asarray(self.compute_cost(expert_votes, i))
-			# 	chat = np.matmul(cm.transpose(), Ihat)
-			# 	min_indices = np.where(chat == np.min(chat))[0]
-			# 	# artificial label
-			# 	aLabel_index = np.random.choice(min_indices)
-			# 	aLabel = self.find_Y(aLabel_index)
-			# 	full_inst = self.make_full_instance(self.X, aLabel)
-
 			w = self.get_weight(i, Lhat)
 			full_inst.set_weight(w)
 			self.weaklearners[i].update_classifier(full_inst)

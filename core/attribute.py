@@ -96,6 +96,8 @@ class Attribute(object):
 		else:
 			return 0
 
+
+
 	def type(self):
 		"""Return the type of the attribute.
 
@@ -127,6 +129,9 @@ class Attribute(object):
 			value (str): The new attribute value to be added.
 		"""
 		self.__values.append(value)
+
+	def set_values(self, new_values):
+		self.__values = new_values
 
 	def set_index(self, index):
 		"""Set the index of the attribute.
