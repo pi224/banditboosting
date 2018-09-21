@@ -17,7 +17,7 @@ class AdaBanditBoost:
 
 	'''
 
-	def __init__(self, loss='logistic', gamma=0.1, rho=.1):
+	def __init__(self, loss='logistic', gamma=0.1, rho=.1, label_chooser='WL'):
 		'''
 		The kwarg loss can take values of 'logistic', 'zero_one', or 'exp'. 
 		'zero_one' option corresponds to OnlineMBBM.
@@ -59,6 +59,7 @@ class AdaBanditBoost:
 		self.rho = rho
 		self.sum = 0
 		self.count = 0
+		self.label_chooser = label_chooser
 	########################################################################
 
 	# Helper functions
@@ -343,6 +344,25 @@ class AdaBanditBoost:
 			lr = self.get_lr(i)
 			return max(-2, min(2, alpha - lr*grad))
 
+	def get_label(self, i, Lhat):
+		# this is only being tested for logistic loss right now
+		assert self.loss == 'logistic'
+		k = self.num_classes
+		s = np.zeros(k)
+		if i != 0:
+			s = self.expert_votes_mat[i-1]
+		cm = np.asarray(self.compute_cost(s, i))
+		chat = np.matmul(cm.transpose(), 1-Lhat)
+		min_value = np.min(chat)
+		min_indices = np.where(chat == min_value)[0]
+		min_index = np.random.choice(min_indices)
+		# this if is for testing only
+		if self.correct_last_round and min_index != self.Y_index:
+			print 'damn'
+		label = self.find_Y(min_index)
+		return label
+
+
 	def get_weight(self, i, Lhat):
 		''' Compute sample weight
 		Args:
@@ -508,6 +528,7 @@ class AdaBanditBoost:
 		yhat = self.Yhat_index
 		k = self.num_classes
 		rho = self.rho
+		self.correct_last_round = ytilde == y
 		P = np.asarray([rho/(k-1) if r != yhat else 1-rho
 					for r in range(k)])
 		Lhat = np.asarray([(ytilde==y)/P[y]*(y!=r)*(yhat!=r) +
@@ -528,7 +549,7 @@ class AdaBanditBoost:
 		set label for bandit info - if we were wrong, set y randomly
 		and change self.Y
 		'''
-		if self.loss == 'zero_one':
+		if self.loss == 'zero_one' or self.loss == 'logistic' and self.label_chooser=='booster':
 			# zero_one loss requires setting the label first
 			if ytilde != y:
 				not_yhats = range(int(k))
@@ -545,6 +566,14 @@ class AdaBanditBoost:
 			alpha = self.wl_weights[i]
 
 			w = self.get_weight(i, Lhat)
+			if self.label_chooser == 'WL' and y != ytilde:
+				assert self.loss == 'logistic'
+				# we only choose labels randomly if we don't know what yprime and ytilde are
+				# this is for testing if weak learners determining their own labels is good
+				yprime = self.get_label(i, Lhat) # yprime is the actual label
+				full_inst = self.make_full_instance(self.X, yprime)
+
+
 			full_inst.set_weight(w)
 			self.weaklearners[i].update_classifier(full_inst)
 
