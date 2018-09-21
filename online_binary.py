@@ -79,7 +79,6 @@ class BinaryBanditBooster:
 		# here, modify tree_dataset so it always has two classes
 		tree_dataset.attribute(class_index).set_values([str(-1), str(1)])
 		self.tree_dataset = tree_dataset
-		print 'self.dataset\n:', self.dataset
 
 	def gen_weaklearners(self, num_wls, min_conf = 0.00001, max_conf = 0.9, 
 		min_grace = 1, max_grace = 10,

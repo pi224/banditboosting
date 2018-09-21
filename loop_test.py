@@ -19,6 +19,7 @@ NUM_WLS = 1
 RHO = 0.0
 GAMMA = 0.0
 DATAFILE = ''
+LABEL_CHOOSER = ''
 MULTIPLIER = 0
 TITLE = ''
 
@@ -62,6 +63,7 @@ def run(rows, model, metric_window):
 def plotRun(BISnum_examples, BISaccuracies, FISnum_examples, FISaccuracies):
 	specs = '_loss='+str(LOSS)+'_num_wls='+str(NUM_WLS)+\
 				'_rho='+str(RHO)+'_gamma='+str(GAMMA)+'\n_DATAFILE='+DATAFILE+\
+				'_LABELCHOOSER='+LABEL_CHOOSER+\
 				'_DATAMULTIPLIER='+str(MULTIPLIER)
 	
 	plt.plot(BISnum_examples, BISaccuracies, color='red')
@@ -103,6 +105,7 @@ if __name__ == '__main__':
 	parser.add_argument('--gamma', type=float, required=True)
 	parser.add_argument('--datafile', type=str, required=True)
 	parser.add_argument('--multiplier', type=int, required=True)
+	parser.add_argument('--label_chooser', type=str, required=True)
 	parser.add_argument('--title', type=str, required=False, default='')
 	args, unknown = parser.parse_known_args()
 	LOSS = args.loss
@@ -111,6 +114,7 @@ if __name__ == '__main__':
 	GAMMA = args.gamma
 	DATAFILE = args.datafile
 	MULTIPLIER = args.multiplier
+	LABEL_CHOOSER = args.label_chooser
 	TITLE = args.title
 
 	filename = os.path.join(DATADIR, DATAFILE)
@@ -133,7 +137,7 @@ if __name__ == '__main__':
 						   min_weight=5, max_weight=200,
 						   seed=random.randint(1, 2000000000))
 
-	BISmodel = AdaBanditBoost(loss=LOSS, gamma=GAMMA, rho=RHO)
+	BISmodel = AdaBanditBoost(loss=LOSS, gamma=GAMMA, rho=RHO, label_chooser=LABEL_CHOOSER)
 	BISmodel.M = 100
 	BISmodel.initialize_dataset(filename, class_index,
 								probe_instances=N*MULTIPLIER)
