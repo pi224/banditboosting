@@ -34,7 +34,7 @@ class AdaBanditBoost:
 		self.exp_step_size = 1
 		self.loss = loss
 		self.gamma = gamma
-		self.M = 100
+		self.M = 10000
 
 		if self.loss == 'zero_one':
 			self.potentials = {}
@@ -59,6 +59,7 @@ class AdaBanditBoost:
 		self.rho = rho
 		self.sum = 0
 		self.count = 0
+		assert label_chooser == 'booster' or label_chooser == 'WL'
 		self.label_chooser = label_chooser
 	########################################################################
 
@@ -268,10 +269,11 @@ class AdaBanditBoost:
 			assert self.loss == 'zero_one'
 			ret = np.zeros((k, k))
 			for r in xrange(k):
+				loss_vector = np.asarray([1.0 if label != r else 0.0 for label in range(k)])
 				for l in xrange(k):
 					e = np.zeros(k)
 					e[l] = 1
-					ret[r, l] = self.get_potential(r, self.num_wls-i-1, s+e)
+					ret[r, l] = self.get_potential(r, self.num_wls-i-1, s+e, loss_vector)
 			return ret
 
 	def get_grad(self, s, i, alpha, label_index):
@@ -307,6 +309,7 @@ class AdaBanditBoost:
 			return ret
 		else:
 			# Can never reach this case
+			assert False
 			return
 
 	def get_lr(self, i):
@@ -356,10 +359,14 @@ class AdaBanditBoost:
 		chat = np.matmul(cm.transpose(), 1-Lhat)
 		min_value = np.min(chat)
 		min_indices = np.where(chat == min_value)[0]
-		min_index = np.random.choice(min_indices)
-		# this if is for testing only
-		if self.correct_last_round and min_index != self.Y_index:
-			print 'damn'
+
+		if self.correct_last_round and self.Y_index not in min_indices:
+			print chat, self.Y_index
+
+		if self.correct_last_round and self.Y_index in min_indices:
+			min_index = self.Y_index
+		else:
+			min_index = np.random.choice(min_indices)
 		label = self.find_Y(min_index)
 		return label
 
@@ -386,6 +393,7 @@ class AdaBanditBoost:
 			ret = 10 * ret / N
 
 		else:
+			k = self.num_classes
 			s = np.zeros(k)
 			if i != 0:
 				s = self.expert_votes_mat[i-1]
@@ -576,8 +584,9 @@ class AdaBanditBoost:
 			alpha = self.wl_weights[i]
 
 			w = self.get_weight(i, Lhat)
-			if self.label_chooser == 'WL' and y != ytilde:
-				assert self.loss == 'logistic'
+			# if self.label_chooser == 'WL' and y != ytilde:
+			if self.label_chooser == 'WL':
+				assert self.loss == 'logistic' or self.loss == 'zero_one'
 				# we only choose labels randomly if we don't know what yprime and ytilde are
 				# this is for testing if weak learners determining their own labels is good
 				yprime = self.get_label(i, Lhat) # yprime is the actual label
