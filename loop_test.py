@@ -124,34 +124,39 @@ if __name__ == '__main__':
 	test_N = int(N - N*training_ratio) * MULTIPLIER
 	assert(test_N > 0)
 	rows = utils.get_rows(filename) * MULTIPLIER
-	rows = utils.shuffle(rows, seed = random.randint(1, 2000000))
 
-	FISmodel = AdaBoostOLM(loss=LOSS, gamma=GAMMA, rho=RHO)
-	FISmodel.M = 100
-	FISmodel.initialize_dataset(filename, class_index,
-								probe_instances=N*MULTIPLIER)
-	FISmodel.gen_weaklearners(num_wls=NUM_WLS,
-						   min_grace=5, max_grace=20,
-						   min_tie=0.01, max_tie=0.9,
-						   min_conf=0.01, max_conf=0.9,
-						   min_weight=5, max_weight=200,
-						   seed=random.randint(1, 2000000000))
 
-	BISmodel = AdaBanditBoost(loss=LOSS, gamma=GAMMA, rho=RHO, label_chooser=LABEL_CHOOSER)
-	BISmodel.M = 100
-	BISmodel.initialize_dataset(filename, class_index,
-								probe_instances=N*MULTIPLIER)
-	BISmodel.gen_weaklearners(num_wls=NUM_WLS,
-						   min_grace=5, max_grace=20,
-						   min_tie=0.01, max_tie=0.9,
-						   min_conf=0.01, max_conf=0.9,
-						   min_weight=5, max_weight=200,
-						   seed=random.randint(1, 2000000000))
+	BISaccuracies = []
+	FISaccuracies = []
+	for _ in range(20):
+		rows = utils.shuffle(rows, seed = random.randint(1, 2000000))
 
-	print 'running BIS model ...'
-	BISnum_examples, BISaccuracies = run(rows, BISmodel, test_N)
-	print 'running FIS model ...'
-	FISnum_examples, FISaccuracies = run(rows, FISmodel, test_N)
+		FISmodel = AdaBoostOLM(loss=LOSS, gamma=GAMMA, rho=RHO)
+		FISmodel.M = 100
+		FISmodel.initialize_dataset(filename, class_index,
+									probe_instances=N*MULTIPLIER)
+		FISmodel.gen_weaklearners(num_wls=NUM_WLS,
+							   min_grace=5, max_grace=20,
+							   min_tie=0.01, max_tie=0.9,
+							   min_conf=0.01, max_conf=0.9,
+							   min_weight=5, max_weight=200,
+							   seed=random.randint(1, 2000000000))
+
+		BISmodel = AdaBanditBoost(loss=LOSS, gamma=GAMMA, rho=RHO, label_chooser=LABEL_CHOOSER)
+		BISmodel.M = 100
+		BISmodel.initialize_dataset(filename, class_index,
+									probe_instances=N*MULTIPLIER)
+		BISmodel.gen_weaklearners(num_wls=NUM_WLS,
+							   min_grace=5, max_grace=20,
+							   min_tie=0.01, max_tie=0.9,
+							   min_conf=0.01, max_conf=0.9,
+							   min_weight=5, max_weight=200,
+							   seed=random.randint(1, 2000000000))
+		
+		BISnum_examples, Bacc = run(rows, BISmodel, test_N)
+		FISnum_examples, Facc = run(rows, FISmodel, test_N)
+		BISaccuracies += [Bacc]
+		FISaccuracies += [Facc]
 
 	plotRun(BISnum_examples, BISaccuracies,
 				FISnum_examples, FISaccuracies)

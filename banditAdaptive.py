@@ -265,12 +265,13 @@ class AdaBanditBoost:
 			ret = ret - (np.dot(ret, np.ones(k)) * np.eye(k))
 			return ret
 		else:
+			assert self.loss == 'zero_one'
 			ret = np.zeros((k, k))
-			# for r in xrange(k):
-			# 	for l in xrange(k):
-			# 		e = np.zeros(k)
-			# 		e[l] = 1
-			# 		ret[r, l] = self.get_potential(r, self.num_wls-i-1, s+e)
+			for r in xrange(k):
+				for l in xrange(k):
+					e = np.zeros(k)
+					e[l] = 1
+					ret[r, l] = self.get_potential(r, self.num_wls-i-1, s+e)
 			return ret
 
 	def get_grad(self, s, i, alpha, label_index):
@@ -346,7 +347,7 @@ class AdaBanditBoost:
 
 	def get_label(self, i, Lhat):
 		# this is only being tested for logistic loss right now
-		assert self.loss == 'logistic'
+		assert self.loss == 'logistic' or self.loss == 'zero_one'
 		k = self.num_classes
 		s = np.zeros(k)
 		if i != 0:
@@ -383,32 +384,41 @@ class AdaBanditBoost:
 			ret = -self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
 			N = np.exp(0.2*np.sqrt(i))
 			ret = 10 * ret / N
-		else:
-			'''
-			bandit weights below
-			this section has been debugged
-			'''
 
-			k = self.num_classes
-			r = self.Y_index
-			n = self.num_wls-i-1
+		else:
 			s = np.zeros(k)
 			if i != 0:
 				s = self.expert_votes_mat[i-1]
+			cm = self.compute_cost(s, i)
+			chat = np.matmul(cm.transpose(), 1-Lhat)
+			ret = np.sum(chat) - k*np.min(chat)
 
-			cost_vector = np.zeros(k)
-			for l in range(k):
-				e = np.zeros(k)
-				e[l] = 1
-				pot_value = self.get_potential(r, n, s+e, Lhat)
-				cost_vector[l] = pot_value
-			# print cost_vector
+		# else:
+		# 	'''
+		# 	bandit weights below
+		# 	this section has been debugged
+		# 	'''
 
-			ret = sum(cost_vector) - k*cost_vector[r]
+		# 	k = self.num_classes
+		# 	r = self.Y_index
+		# 	n = self.num_wls-i-1
+		# 	s = np.zeros(k)
+		# 	if i != 0:
+		# 		s = self.expert_votes_mat[i-1]
 
-			# this heuristic leads to slight improvement
-			const = self.weight_consts[i]
-			ret = 0.1 * const * ret / (self.num_classes-1)
+		# 	cost_vector = np.zeros(k)
+		# 	for l in range(k):
+		# 		e = np.zeros(k)
+		# 		e[l] = 1
+		# 		pot_value = self.get_potential(r, n, s+e, Lhat)
+		# 		cost_vector[l] = pot_value
+		# 	# print cost_vector
+
+		# 	ret = sum(cost_vector) - k*cost_vector[r]
+
+		# 	# this heuristic leads to slight improvement
+		# 	const = self.weight_consts[i]
+		# 	ret = 0.1 * const * ret / (self.num_classes-1)
 		return max(1e-10, ret)
 
 	def predict(self, X, verbose=False):
