@@ -61,7 +61,7 @@ def plotRun(rhos, accuracies):
 		rhos = [math.log10(r) for r in rhos]
 	print 'rhos:', rhos
 
-	notations = [(rhos[0], np.mean(accuracies[0]), np.std(accuracies[0]))]
+	notations = [(rhos[0], np.mean(accuracies), np.std(accuracies))]
 	text = '(log10 rho, mean, stdev)\n' + str(notations)
 
 	if len(rhos) > 1:
