@@ -387,6 +387,7 @@ class AdaBanditBoost:
 			cm = np.asarray(self.compute_cost(s, i))
 			chat = np.matmul(cm.transpose(), 1-Lhat)
 			ret = np.sum(chat) - k*np.min(chat)
+			ret /= (k-1)
 		elif self.loss == 'exp':
 			ret = -self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
 			N = np.exp(0.2*np.sqrt(i))

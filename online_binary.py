@@ -6,8 +6,9 @@ from hoeffdingtree import *
 
 
 class BinaryBanditBooster:
-	def __init__(self, delta, gamma):
-		self.delta = delta
+	def __init__(self, rho, gamma):
+		# takes in rho, and converts it to delta
+		self.rho = rho
 		assert gamma < 0.5
 		self.gamma = gamma
 
@@ -71,6 +72,8 @@ class BinaryBanditBooster:
 
 		dataset = Dataset(attributes, class_index)
 		self.num_classes = dataset.num_classes()
+		# here, set delta from rho
+		self.delta = self.rho * self.num_classes / (self.num_classes - 1)
 
 		# this dataset is for the booster to use
 		self.dataset = dataset
