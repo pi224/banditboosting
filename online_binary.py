@@ -97,7 +97,7 @@ class BinaryBanditBooster:
 			internal variables. 
 		'''
 		if seed is not None:
-			nump.random.seed(seed)
+			np.random.seed(seed)
 		self.num_wls = num_wls
 		self.weaklearners = [[HoeffdingTree() for i in range(num_wls)] 
 			for _ in range(self.num_classes)]

@@ -62,6 +62,10 @@ while [ "$1" != "" ]; do
 			shift
 			lc=$1
 			;;
+		--run_binary)
+			shift
+			rb=$1
+			;;
 		--array_spec)
 			shift
 			as=$1
@@ -85,4 +89,4 @@ echo datafile: $df
 echo multiplier: $m
 echo array_spec: $as
 
-python2 $filename --loss=$ls --num_wls=$wls --rho=$r --gamma=$g --datafile=$df --multiplier=$m --label_chooser=$lc --array_spec=$as
+python2 $filename --loss=$ls --num_wls=$wls --rho=$r --gamma=$g --datafile=$df --multiplier=$m --label_chooser=$lc --array_spec=$as --run_binary=$rb

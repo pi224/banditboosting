@@ -1,5 +1,6 @@
 from onlineAdaptive import AdaBoostOLM
 from banditAdaptive import AdaBanditBoost
+from online_binary import BinaryBanditBooster
 from loop_test import run as loop_run
 import utils
 import os
@@ -27,14 +28,22 @@ LABEL_CHOOSER = ''
 RHORANGE = np.arange(0.01, .21, .02)
 # use linear or exponential plotting
 LIN_OR_EXP = 'lin'
+RUN_BINARY = 'no'
 
 # returns the last accuracy from loop_run
-def run(rows, metric_window):
+def run(rows, metric_window, run_binary=False):
 	accuracies = []
 	for rho in RHORANGE:
 		# create model
 		print 'rho='+str(rho)
-		BISmodel = AdaBanditBoost(loss=LOSS, gamma=GAMMA, rho=rho, label_chooser=LABEL_CHOOSER)
+
+		BISmodel = None
+		if RUN_BINARY is False:
+			BISmodel = AdaBanditBoost(loss=LOSS, gamma=GAMMA, rho=rho, label_chooser=LABEL_CHOOSER)
+		else:
+			# here run_binary is true, so we use that instead of the regular bandit model
+			print('initializing binary bandit')
+			BISmodel = BinaryBanditBooster(gamma=GAMMA, rho=rho)
 		BISmodel.M = 100
 		BISmodel.initialize_dataset(filename, class_index,
 									probe_instances=N*MULTIPLIER)
@@ -44,6 +53,7 @@ def run(rows, metric_window):
 							   min_conf=0.01, max_conf=0.9,
 							   min_weight=5, max_weight=200,
 							   seed=random.randint(1, 2000000000))
+
 		# use loop_run to get the accuracies
 		accuracies += [loop_run(rows, BISmodel, metric_window)[1][-1]]
 	return RHORANGE, accuracies
@@ -54,6 +64,8 @@ def plotRun(rhos, accuracies):
 				'_gamma='+str(GAMMA)+'\n_DATAFILE='+DATAFILE+\
 				'_DATAMULTIPLIER='+str(MULTIPLIER)+\
 				'_labelchooser='+LABEL_CHOOSER+'_arrayspec='+RHORANGESTRING
+	if RUN_BINARY:
+		specs += '_BINARYBANDIT'
 	assert len(rhos) != 0
 
 	if LIN_OR_EXP is 'exp':
@@ -122,6 +134,7 @@ if __name__ == '__main__':
 	parser.add_argument('--multiplier', type=int, required=True)
 	parser.add_argument('--label_chooser', type=str, required=True)
 	parser.add_argument('--num_runs', type=int, default=20)
+	parser.add_argument('--run_binary', type=str, default='no')
 	'''
 	the way to use this argument is like 0.1,0.2,0.3 (list of values)
 	or 0.1_0.2_20 (use numpy.arange)
@@ -137,6 +150,9 @@ if __name__ == '__main__':
 	RHORANGESTRING = args.array_spec
 	LABEL_CHOOSER = args.label_chooser
 	num_runs = args.num_runs
+	RUN_BINARY  = args.run_binary == 'yes'
+	print RUN_BINARY
+
 	if '_' in args.array_spec:
 		LIN_OR_EXP = 'lin'
 		arange_args = [float(arg) for arg in args.array_spec.split('_')]
