@@ -54,43 +54,52 @@ def plotRun(rhos, accuracies):
 				'_gamma='+str(GAMMA)+'\n_DATAFILE='+DATAFILE+\
 				'_DATAMULTIPLIER='+str(MULTIPLIER)+\
 				'_labelchooser='+LABEL_CHOOSER+'_arrayspec='+RHORANGESTRING
+	assert len(rhos) != 0
+
 	if LIN_OR_EXP is 'exp':
 		# exponential plotting
 		rhos = [math.log10(r) for r in rhos]
 	print 'rhos:', rhos
 
-	mean_coordinates = zip(*sns.tsplot(accuracies, time=rhos).get_lines()[0].get_data())
-	# calculate standard deviation to label the plots with
-	stdevs = [np.std(v) for v in zip(*accuracies)]
-	notations = [(m[0], m[1], s) for m, s in zip(mean_coordinates, stdevs)]
+	notations = [(rhos[0], np.mean(accuracies[0]), np.std(accuracies[0]))]
 	text = '(log10 rho, mean, stdev)\n' + str(notations)
 
-	# just testing something here
-	sns.tsplot(accuracies, time=rhos)
+	if len(rhos) > 1:
+		mean_coordinates = zip(*sns.tsplot(accuracies, time=rhos).get_lines()[0].get_data())
+		# calculate standard deviation to label the plots with
+		stdevs = [np.std(v) for v in zip(*accuracies)]
+		notations = [(m[0], m[1], s) for m, s in zip(mean_coordinates, stdevs)]
+		text = '(log10 rho, mean, stdev)\n' + str(notations)
 
-	if LIN_OR_EXP is 'exp':
-		plt.xlabel('log_10(rhos)')
-	else:
-		plt.xlabel('rhos')
-	plt.ylabel('accuracy')
-	plt.title('rho vs performance\n'+specs)
-	plt.tight_layout()
-	plt.subplots_adjust(top=.85)
+		# just testing something here
+		sns.tsplot(accuracies, time=rhos)
+
+		if LIN_OR_EXP is 'exp':
+			plt.xlabel('log_10(rhos)')
+		else:
+			plt.xlabel('rhos')
+		plt.ylabel('accuracy')
+		plt.title('rho vs performance\n'+specs)
+		plt.tight_layout()
+		plt.subplots_adjust(top=.85)
 
 	filename_identifier = specs.replace('\n', '')
 	savefile = os.path.join(RESULTSDIR, OUTFILENAMEBASE+\
 				filename_identifier+OUTFILETYPE)
 	savetext = os.path.join(RESULTSDIR, OUTFILENAMEBASE+\
 				filename_identifier+'.txt')
-	print 'saving graph to', savefile
+
+	if len(rhos) > 1:
+		print 'saving graph to', savefile
+		if os.path.exists(savefile):
+			print 'error:', savefile, 'already exists'
+			exit(1)
+		plt.savefig(savefile)
+	
 	print 'savign text to', savetext
-	if os.path.exists(savefile):
-		print 'error:', savefile, 'already exists'
-		exit(1)
 	if os.path.exists(savetext):
 		print 'error:', savetext, 'already exists'
 		exit(1)
-	plt.savefig(savefile)
 	with open(savetext, 'w') as f:
 		f.write(text)
 
@@ -112,6 +121,7 @@ if __name__ == '__main__':
 	parser.add_argument('--datafile', type=str, required=True)
 	parser.add_argument('--multiplier', type=int, required=True)
 	parser.add_argument('--label_chooser', type=str, required=True)
+	parser.add_argument('--num_runs', type=int, default=20)
 	'''
 	the way to use this argument is like 0.1,0.2,0.3 (list of values)
 	or 0.1_0.2_20 (use numpy.arange)
@@ -126,6 +136,7 @@ if __name__ == '__main__':
 	MULTIPLIER = args.multiplier
 	RHORANGESTRING = args.array_spec
 	LABEL_CHOOSER = args.label_chooser
+	num_runs = args.num_runs
 	if '_' in args.array_spec:
 		LIN_OR_EXP = 'lin'
 		arange_args = [float(arg) for arg in args.array_spec.split('_')]
@@ -146,5 +157,5 @@ if __name__ == '__main__':
 
 	print 'running ...'
 	rho_runs = [run(utils.shuffle(rows, seed=random.randint(1, 2000000)),
-					test_N)[-1] for _ in range(20)]
+					test_N)[-1] for _ in range(num_runs)]
 	plotRun(RHORANGE, rho_runs)
