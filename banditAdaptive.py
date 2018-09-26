@@ -358,11 +358,12 @@ class AdaBanditBoost:
 			s = self.expert_votes_mat[i-1]
 		cm = np.asarray(self.compute_cost(s, i))
 		chat = np.matmul(cm.transpose(), 1-Lhat)
+		chat = np.round(chat, 4)
 		min_value = np.min(chat)
 		min_indices = np.where(chat == min_value)[0]
 
 		if self.correct_last_round and self.Y_index not in min_indices:
-			print chat, self.Y_index
+			ttttt = 5
 
 		if self.correct_last_round and self.Y_index in min_indices:
 			min_index = self.Y_index
