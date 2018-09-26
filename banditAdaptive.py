@@ -323,7 +323,8 @@ class AdaBanditBoost:
 			return 1
 		else:
 			# TODO: get proper learning rate for bandits
-			ret = 2*np.sqrt(2)/((self.num_classes-1)*np.sqrt(self.num_data))
+			k = self.num_classes
+			ret = self.rho / (k**2 * math.sqrt(self.num_data))
 			if self.loss == 'logistic':
 				return ret
 			else:
