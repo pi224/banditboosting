@@ -2,7 +2,6 @@ import csv
 import numpy as np
 import copy
 from hoeffdingtree import *
-import math
 
 class AdaBanditBoost:
 	'''
@@ -18,27 +17,24 @@ class AdaBanditBoost:
 
 	'''
 
-	def __init__(self, loss='logistic', gamma=0.1, rho=.1, divide=False, clipping=100.0):
+	def __init__(self, loss='logistic', gamma=0.1, rho=.1, label_chooser='WL'):
 		'''
 		The kwarg loss can take values of 'logistic', 'zero_one', or 'exp'. 
 		'zero_one' option corresponds to OnlineMBBM.
 
 		The value gamma becomes meaningful only when the loss is 'zero_one'. 
-
-		divide parameter is dividing weights given to the Hoeffding trees by
-			(k-1) or not
 		'''
 		# Initializing computational elements of the algorithm
 		self.num_wls = None
 		self.num_classes = None
 		self.num_data = 0
 		self.dataset = None
-		self.class_index = None
+		self.class_index = None	
 		self.num_errors = 0
 		self.exp_step_size = 1
 		self.loss = loss
 		self.gamma = gamma
-		self.M = 100
+		self.M = 10000
 
 		if self.loss == 'zero_one':
 			self.potentials = {}
@@ -63,11 +59,8 @@ class AdaBanditBoost:
 		self.rho = rho
 		self.sum = 0
 		self.count = 0
-
-		self.counter = 0
-		self.divide = divide
-
-		self.clipping = clipping
+		assert label_chooser == 'booster' or label_chooser == 'WL'
+		self.label_chooser = label_chooser
 	########################################################################
 
 	# Helper functions
@@ -136,6 +129,10 @@ class AdaBanditBoost:
 		'''
 		k = len(b)
 		r = 0
+		# if not self.exploring:
+		# 	correct_cost = 1 - 1/(1-self.rho)
+		# else:
+		# 	correct_cost = 1 - (k-1)/self.rho
 
 		loss = 0.0
 		for _ in xrange(self.M):
@@ -272,13 +269,11 @@ class AdaBanditBoost:
 			assert self.loss == 'zero_one'
 			ret = np.zeros((k, k))
 			for r in xrange(k):
-				zero_one_loss = np.ones(k)
-				zero_one_loss[r] = 0.0
-
+				loss_vector = np.asarray([1.0 if label != r else 0.0 for label in range(k)])
 				for l in xrange(k):
 					e = np.zeros(k)
 					e[l] = 1
-					ret[r, l] = self.get_potential(r, self.num_wls-i-1, s+e, zero_one_loss)
+					ret[r, l] = self.get_potential(r, self.num_wls-i-1, s+e, loss_vector)
 			return ret
 
 	def get_grad(self, s, i, alpha, label_index):
@@ -300,8 +295,21 @@ class AdaBanditBoost:
 				tmp = s[label_index] - s[int(self.wl_preds[i])] - alpha
 				ret = 1/(1 + np.exp(tmp))
 			return ret
+		elif self.loss == 'exp':
+			print 'we don\'t have exponential loss yet!'
+			assert False
+			if self.wl_preds[i] == self.Y_index:
+				tmp_zeroer = np.ones(self.num_classes)
+				tmp_zeroer[self.Y_index] = 0
+				tmp = np.exp(s - (alpha + s[self.Y_index]))
+				ret = sum(tmp_zeroer * tmp)
+			else:
+				tmp = s[int(self.wl_preds[i])] + alpha - s[self.Y_index]
+				ret = np.exp(tmp)
+			return ret
 		else:
 			# Can never reach this case
+			assert False
 			return
 
 	def get_lr(self, i):
@@ -341,12 +349,30 @@ class AdaBanditBoost:
 			lr = self.get_lr(i)
 			return max(-2, min(2, alpha - lr*grad))
 
-	def project(self, value, bound):
-		if value > bound:
-			return bound
-		if value < -bound:
-			return -bound
-		return value
+	def get_label(self, i, Lhat):
+		# this is only being tested for logistic loss right now
+		assert self.loss == 'logistic' or self.loss == 'zero_one'
+		k = self.num_classes
+		s = np.zeros(k)
+		if i != 0:
+			s = self.expert_votes_mat[i-1]
+		cm = np.asarray(self.compute_cost(s, i))
+		chat = np.matmul(cm.transpose(), 1-Lhat)
+		chat = np.round(chat, 4)
+		min_value = np.min(chat)
+		min_indices = np.where(chat == min_value)[0]
+
+		if self.correct_last_round and self.Y_index not in min_indices:
+			ttttt = 5
+
+		if self.correct_last_round and self.Y_index in min_indices:
+			min_index = self.Y_index
+		else:
+			min_index = np.random.choice(min_indices)
+		label = self.find_Y(min_index)
+		return label
+
+
 	def get_weight(self, i, Lhat):
 		''' Compute sample weight
 		Args:
@@ -354,25 +380,56 @@ class AdaBanditBoost:
 		Return:
 			(float): Sample weight
 		'''
-		# const = self.weight_consts[i] do we want this?
-		k = self.num_classes
-		s = np.zeros(k)
-		if i != 0:
-			s = self.expert_votes_mat[i-1]
-		cm = np.asarray(self.compute_cost(s, i))
-		chat = np.matmul(cm.transpose(), 1-Lhat)
-		chat = chat - np.min(chat)
-		chat = np.round(chat, 2)
+		if self.loss == 'logistic':
+			const = self.weight_consts[i]
+			k = self.num_classes
+			s = np.zeros(k)
+			if i != 0:
+				s = self.expert_votes_mat[i-1]
+			cm = np.asarray(self.compute_cost(s, i))
+			chat = np.matmul(cm.transpose(), 1-Lhat)
+			ret = np.sum(chat) - k*np.min(chat)
+			ret /= (k-1)
+		elif self.loss == 'exp':
+			ret = -self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
+			N = np.exp(0.2*np.sqrt(i))
+			ret = 10 * ret / N
 
-		bound = 20.0
-		chat = np.asarray([self.project(x, self.clipping) for x in chat])
+		else:
+			k = self.num_classes
+			s = np.zeros(k)
+			if i != 0:
+				s = self.expert_votes_mat[i-1]
+			cm = self.compute_cost(s, i)
+			chat = np.matmul(cm.transpose(), 1-Lhat)
+			ret = np.sum(chat) - k*np.min(chat)
 
+		# else:
+		# 	'''
+		# 	bandit weights below
+		# 	this section has been debugged
+		# 	'''
 
-		ret = np.sum(chat) - k*np.min(chat)
+		# 	k = self.num_classes
+		# 	r = self.Y_index
+		# 	n = self.num_wls-i-1
+		# 	s = np.zeros(k)
+		# 	if i != 0:
+		# 		s = self.expert_votes_mat[i-1]
 
-		if self.divide:
-			ret /= float(k-1)
+		# 	cost_vector = np.zeros(k)
+		# 	for l in range(k):
+		# 		e = np.zeros(k)
+		# 		e[l] = 1
+		# 		pot_value = self.get_potential(r, n, s+e, Lhat)
+		# 		cost_vector[l] = pot_value
+		# 	# print cost_vector
 
+		# 	ret = sum(cost_vector) - k*cost_vector[r]
+
+		# 	# this heuristic leads to slight improvement
+		# 	const = self.weight_consts[i]
+		# 	ret = 0.1 * const * ret / (self.num_classes-1)
 		return max(1e-10, ret)
 
 	def predict(self, X, verbose=False):
@@ -398,10 +455,17 @@ class AdaBanditBoost:
 		expert_votes_mat = np.zeros([self.num_wls, self.num_classes])
 		wl_preds = np.zeros(self.num_wls)
 		expert_preds = np.zeros(self.num_wls)
+		self.cost_mat_diag = np.zeros([self.num_wls, self.num_classes])
 		
 		for i in xrange(self.num_wls):
 			# Calculate the new cost matrix
 			cost_mat = self.compute_cost(expert_votes, i)
+
+			if self.loss != 'zero_one':
+				# for r in xrange(self.num_classes):
+				# 	self.cost_mat_diag[i,r] = \
+				# 		np.sum(cost_mat[r]) - self.num_classes*cost_mat[r, r]
+				self.cost_mat_diag[i,:] = np.diag(cost_mat)
 				
 			
 			# Get our new week learner prediction and our new expert prediction
@@ -456,22 +520,6 @@ class AdaBanditBoost:
 
 		return self.Ytilde
 
-	def rand_max(self, array):
-		'''
-		returns one of the randomly best indices
-		'''
-		array = np.asarray(array)
-		max_indices = np.where(array == np.max(array))[0]
-		return np.random.choice(max_indices)
-	def rand_min(self, array):
-		'''
-		practically the same as above
-		'''
-		array = np.asarray(array)
-		min_indices = np.where(array == np.min(array))[0]
-		return np.random.choice(min_indices)
-
-
 	def update(self, Y, X=None, verbose=False):
 		'''Runs the entire updating procedure, updating internal 
 		tracking of wl_weights and expert_weights
@@ -494,52 +542,60 @@ class AdaBanditBoost:
 		self.Y = Y
 		self.Y_index = int(self.find_Y_index(Y))
 
-
 		# compute cost function
 		# lowercase definitions are indices starting from 0
 		ytilde = self.Ytilde_index
 		y = self.Y_index
-		self.correct = y == ytilde
 		yhat = self.Yhat_index
 		k = self.num_classes
 		rho = self.rho
+		self.correct_last_round = ytilde == y
 		P = np.asarray([rho/(k-1) if r != yhat else 1-rho
 					for r in range(k)])
 		Lhat = np.asarray([(ytilde==y)/P[y]*(y!=r)*(yhat!=r) +
 							(ytilde==yhat)/P[yhat]*(yhat!=y)*(yhat==r)
 							for r in range(k)])
 		Ihat = np.ones(k)
-		Ihat -= Lhat
 		# only case where we do nothing is when Lhat is still zero
+		if self.loss == 'zero_one':
+			# zero one loss algorithm has some extra constraints
+			if np.sum(Lhat) == 0.0:
+				return
+			assert(np.min(Lhat) == Lhat[y])
+		if self.loss =='logistic':
+			# if we use logistic loss, we will use Ihat
+			Ihat -= Lhat
 
-		full_inst = None
+		'''
+		set label for bandit info - if we were wrong, set y randomly
+		and change self.Y
+		'''
+		if self.loss == 'zero_one' or self.loss == 'logistic' and self.label_chooser=='booster':
+			# zero_one loss requires setting the label first
+			if ytilde != y:
+				not_yhats = range(int(k))
+				not_yhats.remove(yhat)
+				y = np.random.choice(not_yhats)
+				self.Y = self.find_Y(y)
+		full_inst = self.make_full_instance(self.X, self.Y)
+		self.Y_index = int(self.find_Y_index(Y))
+		assert(np.min(Lhat) == Lhat[y])
 
 		expert_votes = np.zeros(self.num_classes)
 		for i in xrange(self.num_wls):
 			# NOTE: be careful where you use LHat and Ihat!
 			alpha = self.wl_weights[i]
 
-			# label is selected randomly
-			cm = np.asarray(self.compute_cost(expert_votes, i))
-			chat = np.matmul(cm.transpose(), Ihat)
-			# chat is not projected
-			chat = np.asarray([self.project(x, self.clipping) for x in chat])
-			chat = np.round(chat, 2)
-
-			min_indices = np.where(chat == np.min(chat))[0]
-
-
-			if self.correct and ytilde in min_indices:
-				correctY = self.find_Y(ytilde)
-				full_inst = self.make_full_instance(self.X, correctY)
-			else:
-				not_ytilde = range(int(k))
-				not_ytilde.remove(ytilde)
-				aLabel_index = np.random.choice(min_indices)
-				aLabel = self.find_Y(aLabel_index)
-				full_inst = self.make_full_instance(self.X, aLabel)
-
 			w = self.get_weight(i, Lhat)
+			# if self.label_chooser == 'WL' and y != ytilde:
+			if self.label_chooser == 'WL':
+				assert self.loss == 'logistic' or self.loss == 'zero_one'
+				# we only choose labels randomly if we don't know what yprime and ytilde are
+				# this is for testing if weak learners determining their own labels is good
+				yprime = self.get_label(i, Lhat) # yprime is the actual label
+				full_inst = self.make_full_instance(self.X, yprime)
+
+
 			full_inst.set_weight(w)
 			self.weaklearners[i].update_classifier(full_inst)
 
