@@ -234,6 +234,14 @@ class AdaBanditBoost:
 	########################################################################
 
 	def get_potential(self, r, n, s, Lhat):
+		''' Compute the potential function
+		Args
+			s (list): Current number of votes
+			r (int): Correct label
+			n (int): number of weak learners left
+		Returns
+			potential function estimate (float)
+		'''
 		new_s = np.asarray(list(s))
 		new_s[r] = -np.inf
 		ordering = new_s.argsort()
@@ -342,11 +350,19 @@ class AdaBanditBoost:
 			return max(-2, min(2, alpha - lr*grad))
 
 	def project(self, value, bound):
+		'''projects value into the range [-bound, bound]
+		Args:
+			value: Original value
+			bound: boundaries of feasible set to project to
+		Return:
+			projection (float/int, type depends on bound)
+		'''
 		if value > bound:
 			return bound
 		if value < -bound:
 			return -bound
 		return value
+
 	def get_weight(self, i, Lhat):
 		''' Compute sample weight
 		Args:
@@ -458,14 +474,14 @@ class AdaBanditBoost:
 
 	def rand_max(self, array):
 		'''
-		returns one of the randomly best indices
+		randomly returns one of the max indices
 		'''
 		array = np.asarray(array)
 		max_indices = np.where(array == np.max(array))[0]
 		return np.random.choice(max_indices)
 	def rand_min(self, array):
 		'''
-		practically the same as above
+		randomly returns one of the min indices
 		'''
 		array = np.asarray(array)
 		min_indices = np.where(array == np.min(array))[0]
@@ -522,13 +538,17 @@ class AdaBanditBoost:
 			# label is selected randomly
 			cm = np.asarray(self.compute_cost(expert_votes, i))
 			chat = np.matmul(cm.transpose(), Ihat)
-			# chat is not projected
 			chat = np.asarray([self.project(x, self.clipping) for x in chat])
 			chat = np.round(chat, 2)
 
 			min_indices = np.where(chat == np.min(chat))[0]
 
 
+			'''
+			select a label based on this rule:
+				If y=ytilde and ytilde minimizes project(chat), choose ytilde
+				Otherwise, select a random label that minimizes ytilde.
+			'''
 			if self.correct and ytilde in min_indices:
 				correctY = self.find_Y(ytilde)
 				full_inst = self.make_full_instance(self.X, correctY)
