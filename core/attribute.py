@@ -136,6 +136,9 @@ class Attribute(object):
 		"""
 		self.__index = index
 
+	def set_values(self, new_values):
+		self.__values = new_values
+
 	def set_type(self, att_type):
 		"""Set the type of the attribute.
 

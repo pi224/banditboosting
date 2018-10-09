@@ -2,6 +2,7 @@ import csv
 import numpy as np
 import copy
 from hoeffdingtree import *
+import math
 
 class AdaBanditBoost:
 	'''
@@ -17,12 +18,15 @@ class AdaBanditBoost:
 
 	'''
 
-	def __init__(self, loss='logistic', gamma=0.1, rho=.05):
+	def __init__(self, loss='logistic', gamma=0.1, rho=.1, divide=False, clipping=100.0):
 		'''
 		The kwarg loss can take values of 'logistic', 'zero_one', or 'exp'. 
 		'zero_one' option corresponds to OnlineMBBM.
 
 		The value gamma becomes meaningful only when the loss is 'zero_one'. 
+
+		divide parameter is dividing weights given to the Hoeffding trees by
+			(k-1) or not
 		'''
 		# Initializing computational elements of the algorithm
 		self.num_wls = None
@@ -59,6 +63,11 @@ class AdaBanditBoost:
 		self.rho = rho
 		self.sum = 0
 		self.count = 0
+
+		self.counter = 0
+		self.divide = divide
+
+		self.clipping = clipping
 	########################################################################
 
 	# Helper functions
@@ -85,7 +94,7 @@ class AdaBanditBoost:
 		value = np.exp(y - x)
 		return value
 
-	def mc_potential(self, t, b, s):
+	def mc_potential_OLD(self, t, b, s):
 		'''Approximate potential via Monte Carlo simulation
 		Arbs:
 			t (int)     : number of weak learners until final decision
@@ -114,6 +123,29 @@ class AdaBanditBoost:
 			else:
 				cnt += correct_cost
 		return float(cnt) / self.M
+
+	def mc_potential(self, t, b, s, L):
+		'''Approximate potential via Monte Carlo simulation
+		Arbs:
+			t (int)     : number of weak learners until final decision
+			b (list)    : baseline distribution
+			s (list)    : current state
+			L (list)	: loss function
+		Returns:
+			potential value (float)
+		'''
+		k = len(b)
+		r = 0
+
+		loss = 0.0
+		for _ in xrange(self.M):
+			x = np.random.multinomial(t, b)
+			x = x + s
+			tmp = [z for z in range(k)
+				if x[z] == max(x)]
+			i = np.random.choice(tmp)
+			loss += L[i]
+		return loss / self.M
 
 	def make_cov_instance(self, X):
 		'''Turns a list of covariates into an Instance set to self.datset 
@@ -201,23 +233,26 @@ class AdaBanditBoost:
 
 	########################################################################
 
-	def get_potential(self, r, n, s):
-		'''Compute potential
-		Args:
-			r (int): True label index
-			n (int): Number of weak learners until final decision
-			s (list): Current state
-		Returns:
-			(float) potential function
+	def get_potential(self, r, n, s, Lhat):
+		''' Compute the potential function
+		Args
+			s (list): Current number of votes
+			r (int): Correct label
+			n (int): number of weak learners left
+		Returns
+			potential function estimate (float)
 		'''
-		new_s = list(s)
+		new_s = np.asarray(list(s))
 		new_s[r] = -np.inf
-		new_s.sort()
+		ordering = new_s.argsort()
+		Lhat_sorted = Lhat[ordering]
+		new_s = new_s[ordering]
 		new_s[0] = s[r]
 
-		key = (n, tuple(new_s), self.exploring)
+		# storing values in hash table
+		key = (n, tuple(new_s), tuple(Lhat_sorted))
 		if key not in self.potentials:
-			value = self.mc_potential(n, self.biased_uniform, new_s)
+			value = self.mc_potential(n, self.biased_uniform, new_s, Lhat_sorted)
 			self.potentials[key] = value
 		return self.potentials[key]
 
@@ -242,15 +277,19 @@ class AdaBanditBoost:
 			ret = ret - (np.dot(ret, np.ones(k)) * np.eye(k))
 			return ret
 		else:
+			assert self.loss == 'zero_one'
 			ret = np.zeros((k, k))
-			# for r in xrange(k):
-			# 	for l in xrange(k):
-			# 		e = np.zeros(k)
-			# 		e[l] = 1
-			# 		ret[r, l] = self.get_potential(r, self.num_wls-i-1, s+e)
+			for r in xrange(k):
+				zero_one_loss = np.ones(k)
+				zero_one_loss[r] = 0.0
+
+				for l in xrange(k):
+					e = np.zeros(k)
+					e[l] = 1
+					ret[r, l] = self.get_potential(r, self.num_wls-i-1, s+e, zero_one_loss)
 			return ret
 
-	def get_grad(self, s, i, alpha):
+	def get_grad(self, s, i, alpha, label_index):
 		''' Compute gradient for differnt losses
 		Args:
 			s (list): Current state
@@ -260,24 +299,14 @@ class AdaBanditBoost:
 			(float): Gradient
 		'''
 		if self.loss == 'logistic':
-			if self.wl_preds[i] == self.Y_index:
+			if self.wl_preds[i] == label_index:
 				tmp_zeroer = np.ones(self.num_classes)
-				tmp_zeroer[self.Y_index] = 0
-				tmp = -1/ (1 + np.exp(s - (alpha + s[self.Y_index])))
+				tmp_zeroer[label_index] = 0
+				tmp = -1/ (1 + np.exp(s - (alpha + s[label_index])))
 				ret = sum(tmp_zeroer * tmp)
 			else:
-				tmp = s[self.Y_index] - s[int(self.wl_preds[i])] - alpha
+				tmp = s[label_index] - s[int(self.wl_preds[i])] - alpha
 				ret = 1/(1 + np.exp(tmp))
-			return ret
-		elif self.loss == 'exp':
-			if self.wl_preds[i] == self.Y_index:
-				tmp_zeroer = np.ones(self.num_classes)
-				tmp_zeroer[self.Y_index] = 0
-				tmp = np.exp(s - (alpha + s[self.Y_index]))
-				ret = sum(tmp_zeroer * tmp)
-			else:
-				tmp = s[int(self.wl_preds[i])] + alpha - s[self.Y_index]
-				ret = np.exp(tmp)
 			return ret
 		else:
 			# Can never reach this case
@@ -293,13 +322,15 @@ class AdaBanditBoost:
 		if self.loss == 'zero_one':
 			return 1
 		else:
-			ret = 2*np.sqrt(2)/((self.num_classes-1)*np.sqrt(self.num_data))
+			# TODO: get proper learning rate for bandits
+			k = self.num_classes
+			ret = self.rho / (k**2 * math.sqrt(self.num_data))
 			if self.loss == 'logistic':
 				return ret
 			else:
 				return ret * np.exp(-i)
 		
-	def update_alpha(self, s, i, alpha):
+	def update_alpha(self, s, i, alpha, Ihat):
 		''' Update the weight alpha
 		Args:
 			s (list): Current state
@@ -311,108 +342,53 @@ class AdaBanditBoost:
 		if self.loss == 'zero_one':
 			return 1
 		else:
-			grad = self.get_grad(s, i, alpha)
-			if not self.exploring:
-				grad /= (1-self.rho)
-			else:
-				grad *= (self.num_classes-1)/self.rho
+			k = self.num_classes
+			grad_vector = np.asarray([self.get_grad(s, i, alpha, label_index)
+					for label_index in range(k)])
+			grad = np.dot(grad_vector, Ihat)
 			lr = self.get_lr(i)
 			return max(-2, min(2, alpha - lr*grad))
 
-	def arbitrary_mc_potential(self, t, b, s, L):
-		'''Approximate potential via Monte Carlo simulation
-		Arbs:
-			t (int)     : number of weak learners until final decision
-			b (list)    : baseline distribution
-			s (list)    : current state
-			L (array)	: loss function
-		Returns:
-			potential value (float)
-		'''
-		k = len(b)
-		cnt = 0
-		for _ in xrange(self.M):
-			x = np.random.multinomial(t, b)
-			x = x + s
-
-			tmp = [z for z in range(k)
-						if x[z] == max(x)]
-			i = np.random.choice(tmp)
-			cnt += L[i]
-		return float(cnt) / self.M
-
-	def get_arbitrary_potential(self, r, n, s, L):
-		'''Compute potential
+	def project(self, value, bound):
+		'''projects value into the range [-bound, bound]
 		Args:
-			r (int): True label index
-			n (int): Number of weak learners until final decision
-			s (list): Current state
-			L (array): the loss at each index
-		Returns:
-			(float) potential function
+			value: Original value
+			bound: boundaries of feasible set to project to
+		Return:
+			projection (float/int, type depends on bound)
 		'''
-		# TODO: make this faster?
-		k = self.num_classes
-		distribution = np.ones(self.num_classes) * (1-self.gamma)/float(k)
-		distribution[r] += self.gamma
-		return self.arbitrary_mc_potential(n, distribution, s, L)
+		if value > bound:
+			return bound
+		if value < -bound:
+			return -bound
+		return value
 
-	def get_weight(self, i):
+	def get_weight(self, i, Lhat):
 		''' Compute sample weight
 		Args:
 			i (int): Weak learner index
 		Return:
 			(float): Sample weight
 		'''
-		if self.loss == 'logistic':
-			if i == 0:
-				return 5
-			const = self.weight_consts[i]
-			ret = -const * self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
+		# const = self.weight_consts[i] do we want this?
+		k = self.num_classes
+		s = np.zeros(k)
+		if i != 0:
+			s = self.expert_votes_mat[i-1]
+		cm = np.asarray(self.compute_cost(s, i))
+		chat = np.matmul(cm.transpose(), 1-Lhat)
+		chat = chat - np.min(chat)
+		chat = np.round(chat, 2)
 
-			if not self.exploring:
-				ret /= 1-self.rho
-			else:
-				ret *= (self.num_classes-1)/self.rho
+		bound = 20.0
+		chat = np.asarray([self.project(x, self.clipping) for x in chat])
 
-		elif self.loss == 'exp':
-			ret = -self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
-			N = np.exp(0.2*np.sqrt(i))
-			ret = 10 * ret / N
-		else:
-			# const = self.weight_consts[i]
-			# ret = self.cost_mat_diag[i,self.Y_index]/(self.num_classes-1)
-			# ret = 0.1 * const * ret
-			'''
-			bandit weights below
-			'''
 
-			k = self.num_classes
-			r = self.Y_index
-			n = self.num_wls-i-1
-			s = np.zeros(k)
-			if i != 0:
-				s = self.expert_votes_mat[i-1]
+		ret = np.sum(chat) - k*np.min(chat)
 
-			cost_vector = np.zeros(k)
-			for l in range(k):
-				e = np.zeros(k)
-				e[l] = 1
-				pot_value = self.get_potential(r, n, s+e)
-				if not self.exploring:
-					cost_vector[l] = pot_value/(1-self.rho)
-				else:
-					cost_vector[l] = pot_value*(k-1)/self.rho
+		if self.divide:
+			ret /= float(k-1)
 
-			ret = sum(cost_vector) - k*cost_vector[r]
-
-			# this heuristic leads to slight improvement
-			const = self.weight_consts[i]
-			ret = 0.1 * const * ret / (self.num_classes-1)
-
-			if i == 0:
-				self.sum += ret
-				self.count += 1
 		return max(1e-10, ret)
 
 	def predict(self, X, verbose=False):
@@ -438,17 +414,10 @@ class AdaBanditBoost:
 		expert_votes_mat = np.zeros([self.num_wls, self.num_classes])
 		wl_preds = np.zeros(self.num_wls)
 		expert_preds = np.zeros(self.num_wls)
-		self.cost_mat_diag = np.zeros([self.num_wls, self.num_classes])
 		
 		for i in xrange(self.num_wls):
 			# Calculate the new cost matrix
 			cost_mat = self.compute_cost(expert_votes, i)
-
-			if self.loss != 'zero_one':
-				# for r in xrange(self.num_classes):
-				# 	self.cost_mat_diag[i,r] = \
-				# 		np.sum(cost_mat[r]) - self.num_classes*cost_mat[r, r]
-				self.cost_mat_diag[i,:] = np.diag(cost_mat)
 				
 			
 			# Get our new week learner prediction and our new expert prediction
@@ -503,8 +472,24 @@ class AdaBanditBoost:
 
 		return self.Ytilde
 
+	def rand_max(self, array):
+		'''
+		randomly returns one of the max indices
+		'''
+		array = np.asarray(array)
+		max_indices = np.where(array == np.max(array))[0]
+		return np.random.choice(max_indices)
+	def rand_min(self, array):
+		'''
+		randomly returns one of the min indices
+		'''
+		array = np.asarray(array)
+		min_indices = np.where(array == np.min(array))[0]
+		return np.random.choice(min_indices)
+
+
 	def update(self, Y, X=None, verbose=False):
-		'''Runs the entire updating procedure, updating interal 
+		'''Runs the entire updating procedure, updating internal 
 		tracking of wl_weights and expert_weights
 		Args:
 			X (list): A list of the covariates of the current data point. 
@@ -515,29 +500,66 @@ class AdaBanditBoost:
 			verbose (bool): If true, the function prints logs. 
 		'''
 
+		# this is here so that learning rate goes down appropriately
+		self.num_data +=1
+
 		if X is None:
 			X = self.X
 
 		self.X = X
 		self.Y = Y
-
-		self.correct = False
-		if self.Ytilde != self.Y:
-			self.count += 1
-			# nothing more to do here
-			return
-
-
-		full_inst = self.make_full_instance(self.X, self.Y)
 		self.Y_index = int(self.find_Y_index(Y))
-		self.num_data +=1
-		self.num_errors = self.num_errors + (self.Y_index != self.Yhat_index)
+
+
+		# compute cost function
+		# lowercase definitions are indices starting from 0
+		ytilde = self.Ytilde_index
+		y = self.Y_index
+		self.correct = y == ytilde
+		yhat = self.Yhat_index
+		k = self.num_classes
+		rho = self.rho
+		P = np.asarray([rho/(k-1) if r != yhat else 1-rho
+					for r in range(k)])
+		Lhat = np.asarray([(ytilde==y)/P[y]*(y!=r)*(yhat!=r) +
+							(ytilde==yhat)/P[yhat]*(yhat!=y)*(yhat==r)
+							for r in range(k)])
+		Ihat = np.ones(k)
+		Ihat -= Lhat
+		# only case where we do nothing is when Lhat is still zero
+
+		full_inst = None
 
 		expert_votes = np.zeros(self.num_classes)
 		for i in xrange(self.num_wls):
+			# NOTE: be careful where you use LHat and Ihat!
 			alpha = self.wl_weights[i]
 
-			w = self.get_weight(i) 
+			# label is selected randomly
+			cm = np.asarray(self.compute_cost(expert_votes, i))
+			chat = np.matmul(cm.transpose(), Ihat)
+			chat = np.asarray([self.project(x, self.clipping) for x in chat])
+			chat = np.round(chat, 2)
+
+			min_indices = np.where(chat == np.min(chat))[0]
+
+
+			'''
+			select a label based on this rule:
+				If y=ytilde and ytilde minimizes project(chat), choose ytilde
+				Otherwise, select a random label that minimizes ytilde.
+			'''
+			if self.correct and ytilde in min_indices:
+				correctY = self.find_Y(ytilde)
+				full_inst = self.make_full_instance(self.X, correctY)
+			else:
+				not_ytilde = range(int(k))
+				not_ytilde.remove(ytilde)
+				aLabel_index = np.random.choice(min_indices)
+				aLabel = self.find_Y(aLabel_index)
+				full_inst = self.make_full_instance(self.X, aLabel)
+
+			w = self.get_weight(i, Lhat)
 			full_inst.set_weight(w)
 			self.weaklearners[i].update_classifier(full_inst)
 
@@ -546,16 +568,19 @@ class AdaBanditBoost:
 
 			# updating the quality weights and weighted vote vector
 			self.wl_weights[i] = \
-								self.update_alpha(expert_votes, i, alpha)
+								self.update_alpha(expert_votes, i, alpha, Ihat)
+			# self.wl_weights[i] = 1
 			expert_votes[int(self.wl_preds[i])] += alpha
 
-			if self.expert_preds[i] != self.Y_index:
-				expert_loss = 1
-				if not self.exploring:
-					expert_loss /= 1-self.rho
-				else:
-					expert_loss *= (self.num_classes-1)/self.rho
-				self.expert_weights[i] *= np.exp(-self.exp_step_size*expert_loss)
+			'''
+			get an unbiased estimate of expert loss by taking
+			the estimated zero-one loss from Lhat
+			'''
+			expert_vote_index = np.random.choice(np.where(
+						expert_votes == np.max(expert_votes)
+					)[0])
+			expert_loss = Lhat[expert_vote_index]
+			self.expert_weights[i] *= np.exp(-self.exp_step_size*expert_loss)
 
 		self.expert_weights = self.expert_weights/sum(self.expert_weights)
 

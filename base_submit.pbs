@@ -1,0 +1,84 @@
+####  PBS preamble
+
+#PBS -N bandit_boosting
+#PBS -M dtzhang@umich.edu
+#PBS -m bae
+
+#PBS -A tewaria_fluxm
+#PBS -l qos=flux
+#PBS -q fluxm
+
+#PBS -l nodes=1:ppn=2,pmem=8gb
+#PBS -l walltime=10:00:00
+#PBS -j oe
+#PBS -V
+
+####  End PBS preamble
+if [ -s "$PBS_NODEFILE" ] ; then
+	echo "Running on"
+	uniq -c $PBS_NODEFILE
+fi
+
+if [ -d "$PBS_O_WORKDIR" ] ; then
+	cd $PBS_O_WORKDIR
+	echo "Running from $PBS_O_WORKDIR"
+fi
+
+# example command line:
+# ./base_submit.pbs --test_type rho_test --loss zero_one --num_wls 10 --datafile balance-scale.csv --rho blank --gamma 0.1 --multiplier 1 --array_spec 0.05,0.01
+module load python-anaconda3
+module load python-anaconda2
+while [ "$1" != "" ]; do
+	case $1 in
+		--test_type)
+			shift
+			test_type=$1
+			;;
+		--loss)
+			shift
+			ls=$1
+			;;
+		--num_wls)
+			shift
+			wls=$1
+			;;
+		--datafile)
+			shift
+			df=$1
+			;;
+		--rho)
+			shift
+			r=$1
+			;;
+		--gamma)
+			shift
+			g=$1
+			;;
+		--multiplier)
+			shift
+			m=$1
+			;;
+		--array_spec)
+			shift
+			as=$1
+			;;
+		*)
+			echo "unknown option $1 - exiting"
+			exit
+	esac
+	shift
+done
+
+pystring=.py
+filename=$test_type$pystring
+
+echo filename: $filename
+echo loss: $ls
+echo num_wls: $wls
+echo rho: $r
+echo gamma: $g
+echo datafile: $df
+echo multiplier: $m
+echo array_spec: $as
+
+python2 $filename --loss=$ls --num_wls=$wls --rho=$r --gamma=$g --datafile=$df --multiplier=$m --array_spec=$as
