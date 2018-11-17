@@ -80,8 +80,8 @@ class AdaBanditBoost:
 		Returns:
 			value (float): the expit difference
 		'''
-		value = 1/(1 + np.exp(x - y))
-		return value
+		v = 1/(1 + np.exp(x - y))
+		return v
 
 	def exp_diff(self, x, y):
 		'''Calculates the exponential of difference between two numbers
@@ -375,16 +375,12 @@ class AdaBanditBoost:
 		s = np.zeros(k)
 		if i != 0:
 			s = self.expert_votes_mat[i-1]
-		cm = np.asarray(self.compute_cost(s, i))
+		cm = self.cm
 		chat = np.matmul(cm.transpose(), 1-Lhat)
 		chat = chat - np.min(chat)
 		chat = np.round(chat, 2)
 
-		bound = 20.0
-		chat = np.asarray([self.project(x, self.clipping) for x in chat])
-
-
-		ret = np.sum(chat) - k*np.min(chat)
+		ret = np.sum(chat)
 
 		if self.divide:
 			ret /= float(k-1)
@@ -488,7 +484,7 @@ class AdaBanditBoost:
 		return np.random.choice(min_indices)
 
 
-	def update(self, Y, X=None, verbose=False):
+	def update(self, correct, X=None, verbose=False):
 		'''Runs the entire updating procedure, updating internal 
 		tracking of wl_weights and expert_weights
 		Args:
@@ -507,22 +503,19 @@ class AdaBanditBoost:
 			X = self.X
 
 		self.X = X
-		self.Y = Y
-		self.Y_index = int(self.find_Y_index(Y))
 
 
 		# compute cost function
 		# lowercase definitions are indices starting from 0
 		ytilde = self.Ytilde_index
-		y = self.Y_index
-		self.correct = y == ytilde
+		self.correct = correct
 		yhat = self.Yhat_index
 		k = self.num_classes
 		rho = self.rho
 		P = np.asarray([rho/(k-1) if r != yhat else 1-rho
 					for r in range(k)])
-		Lhat = np.asarray([(ytilde==y)/P[y]*(y!=r)*(yhat!=r) +
-							(ytilde==yhat)/P[yhat]*(yhat!=y)*(yhat==r)
+		Lhat = np.asarray([(correct)/P[ytilde]*(ytilde!=r)*(yhat!=r) +
+							(ytilde==yhat)/P[yhat]*(not correct)*(yhat==r)
 							for r in range(k)])
 		Ihat = np.ones(k)
 		Ihat -= Lhat
@@ -537,6 +530,7 @@ class AdaBanditBoost:
 
 			# label is selected randomly
 			cm = np.asarray(self.compute_cost(expert_votes, i))
+			self.cm = cm
 			chat = np.matmul(cm.transpose(), Ihat)
 			chat = np.asarray([self.project(x, self.clipping) for x in chat])
 			chat = np.round(chat, 2)

@@ -77,13 +77,17 @@ def run(dataset, model):
 	rows = utils.shuffle(rows, seed = random.randint(1, 2000000))
 	num_rows = len(rows)
 
+	full_info_feedback = isinstance(model, AdaBoostOLM)
 	correctness = [False] * num_rows
 	for i in tqdm(range(num_rows)):
 		row = rows[i]
 		X = row[1:]
 		Y = row[0]
 		pred = model.predict(X)
-		model.update(Y)
+		if full_info_feedback:
+			model.update(Y)
+		else:
+			model.update(Y == pred)
 		correctness[i] = pred == Y
 
 	return correctness
