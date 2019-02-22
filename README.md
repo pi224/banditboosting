@@ -1,9 +1,7 @@
 # Bandit Multiclass Boosting
-************details below are not necessarily correct
+A Python implementation of online bandit multiclass boosting using VFDT as weak learners. 
 
-A Python implementation of online multiclass boosting using VFDT as weak learners. 
-
-The algorithms are described and theoretically analazed in the following work. 
+The algorithms are described and theoretically analyzed in the following work. 
 ```
 Daniel T. Zhang, Young Hun Jung, Ambuj Tewari. 
 Online multiclass boosting with bandit feedback.
