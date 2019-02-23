@@ -5,7 +5,8 @@ The algorithms are described and theoretically analyzed in the following work.
 ```
 Daniel T. Zhang, Young Hun Jung, Ambuj Tewari. 
 Online multiclass boosting with bandit feedback.
-Accepted to AISTATS 2019, Okinawa, Japan
+In Proceedings of the 22nd Artificial Intelligence and Statistics Conference (AISTATS 2019).
+Naha, Okinawa, Japan
 ```
 
 If you use this code in your paper, please cite the above work. Although it is based on this we cannot guarantee that the algorithm will work exactly, or even produce the same output, as any of these implementations.
